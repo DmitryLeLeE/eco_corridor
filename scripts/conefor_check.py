@@ -9,7 +9,7 @@ on a Windows machine (see docs/validation.md, section "Сверка с Conefor")
 
        python scripts/conefor_check.py toy out/toy
        # run Conefor on out/toy/nodes.txt + distances.txt as described in conefor_settings.txt
-       python scripts/conefor_check.py compare out/toy/expected.json --pc 0.xxxxxx --iic 0.xxxxxx --eca xxx.xx
+       python scripts/conefor_check.py compare out/toy/expected.json --pc <PC> --iic <IIC> --pcnum <PCnum>
 
 2. the real landscape (bundled demo or any territory; the scenario selects the habitat mask):
 
@@ -18,7 +18,7 @@ on a Windows machine (see docs/validation.md, section "Сверка с Conefor")
 
 3. enter Conefor's values:
 
-       python scripts/conefor_check.py compare out/demo/expected.json --pc ... --iic ... --eca ...
+       python scripts/conefor_check.py compare out/demo/expected.json --pc <PC> --iic <IIC> --pcnum <PCnum>
 
 ``compare`` exits with 1 when any index differs by more than --tol (relative, default 1e-3).
 """
@@ -71,9 +71,10 @@ def cmd_compare(args) -> int:
     from ecocorridor import interop
 
     expected = json.loads(Path(args.expected).read_text(encoding="utf-8"))["expected"]
-    rows = interop.compare(expected, {"pc": args.pc, "iic": args.iic, "eca_ha": args.eca}, rel_tol=args.tol)
+    eca = args.eca if args.eca is not None else (args.pcnum**0.5 if args.pcnum is not None else None)
+    rows = interop.compare(expected, {"pc": args.pc, "iic": args.iic, "eca_ha": eca}, rel_tol=args.tol)
     if not rows:
-        raise SystemExit("введите хотя бы одно значение: --pc, --iic или --eca")
+        raise SystemExit("введите хотя бы одно значение: --pc, --iic, --pcnum или --eca")
     print(f"{'индекс':8s} {'ecocorridor':>14s} {'Conefor':>14s} {'отн. разница':>14s}")
     for r in rows:
         print(f"{r['index']:8s} {r['ecocorridor']:14.6f} {r['conefor']:14.6f} {r['rel_diff']:14.2e}  {'ок' if r['ok'] else 'РАСХОЖДЕНИЕ'}")
@@ -100,7 +101,8 @@ def main(argv: list[str] | None = None) -> int:
     cmp_.add_argument("expected", help="expected.json из каталога экспорта")
     cmp_.add_argument("--pc", type=float)
     cmp_.add_argument("--iic", type=float)
-    cmp_.add_argument("--eca", type=float, help="ECA (EC(PC)) в га")
+    cmp_.add_argument("--eca", type=float, help="ECA в га (в Conefor 2.2 нет; см. --pcnum)")
+    cmp_.add_argument("--pcnum", type=float, help="PCnum из Conefor; ECA = sqrt(PCnum)")
     cmp_.add_argument("--tol", type=float, default=1e-3)
     cmp_.set_defaults(func=cmd_compare)
 

@@ -149,6 +149,7 @@ def test_toy_case_expected_values_by_hand(tmp_path):
     assert math.isclose(meta["expected"]["pc"], total / al**2, rel_tol=1e-12)
     assert math.isclose(meta["expected"]["eca_ha"], math.sqrt(total), rel_tol=1e-12)
     assert math.isclose(meta["expected"]["eca_ha"], al * math.sqrt(meta["expected"]["pc"]), rel_tol=1e-12)
+    assert math.isclose(meta["expected"]["pcnum"], total, rel_tol=1e-12)
 
 
 def test_export_files_are_consistent_with_the_patch_graph(toy, tmp_path):
@@ -158,8 +159,10 @@ def test_export_files_are_consistent_with_the_patch_graph(toy, tmp_path):
     pg = patch_graph(project, lc == 4, params)
     meta = interop.export_conefor(pg, tmp_path)
 
-    nodes = [line.split("\t") for line in (tmp_path / "nodes.txt").read_text().splitlines()]
-    links = [line.split("\t") for line in (tmp_path / "distances.txt").read_text().splitlines()]
+    for name in ("nodes.txt", "distances.txt"):  # Conefor wants a blank line after the last record
+        assert (tmp_path / name).read_text().endswith("\n\n")
+    nodes = [line.split("\t") for line in (tmp_path / "nodes.txt").read_text().splitlines() if line]
+    links = [line.split("\t") for line in (tmp_path / "distances.txt").read_text().splitlines() if line]
     assert len(nodes) == meta["nodes"] == len(pg.ids)
     assert len(links) == meta["connections"] == len(pg.pair_d)
     assert [int(n[0]) for n in nodes] == list(range(1, len(nodes) + 1))
@@ -168,7 +171,8 @@ def test_export_files_are_consistent_with_the_patch_graph(toy, tmp_path):
     exp = json.loads((tmp_path / "expected.json").read_text())["expected"]
     assert math.isclose(exp["pc"], out["pc"], abs_tol=6e-7)
     assert math.isclose(exp["iic"], out["iic"], abs_tol=6e-7)
-    assert "0.367879" in (tmp_path / "conefor_settings.txt").read_text(encoding="utf-8")
+    settings = (tmp_path / "conefor_settings.txt").read_text(encoding="utf-8")
+    assert "0.367879" in settings and "PARTIAL" in settings and "PCnum" in settings
 
 
 def test_compare_flags_a_mismatch():
