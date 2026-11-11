@@ -34,6 +34,7 @@ import markdown  # noqa: E402
 from ecocorridor import __version__  # noqa: E402
 
 SCENARIOS = ("base", "urban", "road", "restore")
+SITE_URL = "https://dmitrylelee.github.io/eco_corridor/"
 
 # page file -> (source markdown, nav title)
 PAGES = {
@@ -165,6 +166,13 @@ const API = (() => {
         '<a href="../index.html">← к документации</a> · <a href="../guide.html">справка</a> · '
         '<a href="https://github.com/DmitryLeLeE/eco_corridor">код</a></div>'
     )
+    og = (
+        '<meta property="og:type" content="website"><meta property="og:title" content="EcoCorridor — демо">'
+        '<meta property="og:description" content="Интерактивная демонстрация: сопротивление, коридоры, ток, сценарии">'
+        f'<meta property="og:url" content="{SITE_URL}demo/index.html"><meta property="og:image" content="{SITE_URL}img/social.png">'
+        '<meta name="twitter:card" content="summary_large_image">'
+    )
+    page = page.replace("</head>", og + "</head>", 1)
     page = page.replace('<div class="app">', banner + '\n<div class="app">', 1)
     lock = """<script>
 document.addEventListener("DOMContentLoaded", () => {
@@ -193,6 +201,19 @@ TEMPLATE = """<!DOCTYPE html>
 <title>{title} — EcoCorridor</title>
 <meta name="description" content="{description}">
 <meta name="citation_title" content="EcoCorridor: {title}">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="EcoCorridor">
+<meta property="og:locale" content="ru_RU">
+<meta property="og:title" content="{title} — EcoCorridor">
+<meta property="og:description" content="{description}">
+<meta property="og:url" content="{site}{page_name}.html">
+<meta property="og:image" content="{site}img/social.png">
+<meta property="og:image:width" content="1280">
+<meta property="og:image:height" content="640">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="{title} — EcoCorridor">
+<meta name="twitter:description" content="{description}">
+<meta name="twitter:image" content="{site}img/social.png">
 <link rel="stylesheet" href="site.css">
 </head>
 <body>
@@ -293,7 +314,7 @@ def build_docs(out: Path, meta: dict) -> None:
         body = md.convert(text)
         first = re.search(r"<p>(.*?)</p>", body, re.S)
         description = html.escape(re.sub(r"<[^>]+>", "", first.group(1))[:200]) if first else "EcoCorridor"
-        page = TEMPLATE.format(title=html.escape(title), description=description, nav=nav(name), toc=md.toc, body=body, version=__version__, built=built, commit=meta["commit"][:7] or "—")
+        page = TEMPLATE.format(site=SITE_URL, page_name=name, title=html.escape(title), description=description, nav=nav(name), toc=md.toc, body=body, version=__version__, built=built, commit=meta["commit"][:7] or "—")
         (out / f"{name}.html").write_text(page, encoding="utf-8")
     (out / "site.css").write_text(SITE_CSS, encoding="utf-8")
     shutil.copytree(ROOT / "docs/img", out / "img", dirs_exist_ok=True)
