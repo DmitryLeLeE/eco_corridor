@@ -1,0 +1,65 @@
+{
+  "field": "class",
+  "classes": [
+    {
+      "code": 1,
+      "name": "Вода",
+      "color": "#2E6E8E",
+      "resistance": 800
+    },
+    {
+      "code": 2,
+      "name": "Пойменные водно-болотные угодья",
+      "color": "#5E8A6B",
+      "resistance": 45
+    },
+    {
+      "code": 3,
+      "name": "Тёмнохвойный лес",
+      "color": "#1B4A38",
+      "resistance": 3
+    },
+    {
+      "code": 4,
+      "name": "Смешанный лес",
+      "color": "#2F6B4C",
+      "resistance": 6
+    },
+    {
+      "code": 5,
+      "name": "Луга и пастбища",
+      "color": "#9FAF74",
+      "resistance": 18
+    },
+    {
+      "code": 6,
+      "name": "Пашня",
+      "color": "#CDB77F",
+      "resistance": 40
+    },
+    {
+      "code": 7,
+      "name": "Редколесье и гари",
+      "color": "#A98B60",
+      "resistance": 28
+    },
+    {
+      "code": 8,
+      "name": "Селитебная застройка",
+      "color": "#A9695C",
+      "resistance": 250
+    },
+    {
+      "code": 9,
+      "name": "Дороги",
+      "color": "#E4D3A6",
+      "resistance": 400
+    },
+    {
+      "code": 10,
+      "name": "Скалы и обнажения",
+      "color": "#8E9188",
+      "resistance": 90
+    }
+  ]
+}

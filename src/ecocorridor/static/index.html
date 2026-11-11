@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EcoCorridor — моделирование экологических коридоров</title>
+<meta name="description" content="Веб-анализ связности природных территорий: поверхность сопротивления, least-cost path, фрагментация, сценарии урбанизации.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230d1512'/%3E%3Cpath d='M8 24 L14 12 L19 19 L24 7' stroke='%235BE3A6' stroke-width='2.4' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body>
+<div class="app">
+
+  <header class="topbar">
+    <div class="brand">
+      <svg class="logo" viewBox="0 0 44 44" aria-hidden="true">
+        <rect x="1" y="1" width="42" height="42" rx="12" fill="#0f1b16" stroke="#22362c"/>
+        <path d="M10 32 L18 17 L24 25 L33 9" fill="none" stroke="#5BE3A6" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="18" cy="17" r="2.6" fill="#5BE3A6"/>
+        <circle cx="33" cy="9" r="2.6" fill="#F2C14E"/>
+      </svg>
+      <div class="brand-text">
+        <span class="brand-name">EcoCorridor</span>
+        <span class="brand-sub">связность ландшафтов</span>
+      </div>
+    </div>
+
+    <div class="project-pill" id="project-pill">
+      <span class="pulse"></span>
+      <div class="project-text">
+        <b id="project-name">Загрузка проекта…</b>
+        <span id="project-meta">—</span>
+      </div>
+    </div>
+
+    <nav class="topnav">
+      <button class="nav-btn" id="btn-method">Методика</button>
+      <button class="nav-btn" id="btn-compare">Сценарии</button>
+      <button class="btn primary" id="btn-run">
+        <svg viewBox="0 0 24 24" width="15" height="15"><path d="M4 12a8 8 0 1 1 2.4 5.7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M4 20v-5h5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        Пересчитать
+      </button>
+    </nav>
+  </header>
+
+  <main class="layout">
+
+    <aside class="sidebar">
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Сценарий</h2>
+          <span class="panel-tag" id="scenario-tag">base</span>
+        </div>
+        <div class="scenario-list" id="scenario-list"></div>
+        <p class="hint" id="scenario-note"></p>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Поверхность сопротивления</h2>
+          <button class="link-btn" data-reset="resistance">сброс</button>
+        </div>
+        <div class="field">
+          <label for="w-slope">Рельеф<span class="field-hint">уклон, 0–22°</span></label>
+          <div class="field-control">
+            <input type="range" id="w-slope" min="0" max="2" step="0.05" value="0.9">
+            <output id="w-slope-val">0.90</output>
+          </div>
+        </div>
+        <div class="field">
+          <label for="w-road">Дороги<span class="field-hint">затухание 350 м</span></label>
+          <div class="field-control">
+            <input type="range" id="w-road" min="0" max="2" step="0.05" value="0.8">
+            <output id="w-road-val">0.80</output>
+          </div>
+        </div>
+        <div class="field">
+          <label for="w-urban">Застройка<span class="field-hint">затухание 1,2 км</span></label>
+          <div class="field-control">
+            <input type="range" id="w-urban" min="0" max="2" step="0.05" value="0.6">
+            <output id="w-urban-val">0.60</output>
+          </div>
+        </div>
+        <div class="field">
+          <label for="mode">Композиция</label>
+          <select id="mode" class="select">
+            <option value="multiplicative">Мультипликативная</option>
+            <option value="weighted_sum">Взвешенная сумма</option>
+          </select>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Коридорная сеть</h2>
+          <button class="link-btn" data-reset="corridors">сброс</button>
+        </div>
+        <div class="field">
+          <label for="max-link">Максимальная связь<span class="field-hint">между ядрами</span></label>
+          <div class="field-control">
+            <input type="range" id="max-link" min="5" max="80" step="1" value="34">
+            <output id="max-link-val">34 км</output>
+          </div>
+        </div>
+        <div class="field">
+          <label for="width">Ширина коридора</label>
+          <div class="field-control">
+            <input type="range" id="width" min="100" max="1000" step="50" value="250">
+            <output id="width-val">250 м</output>
+          </div>
+        </div>
+        <div class="field">
+          <label for="detour">Допуск альтернатив<span class="field-hint">к остовному пути</span></label>
+          <div class="field-control">
+            <input type="range" id="detour" min="1" max="2" step="0.05" value="1.25">
+            <output id="detour-val">×1.25</output>
+          </div>
+        </div>
+        <div class="field">
+          <label for="dispersal">Ядро расселения d₀<span class="field-hint">для PC / IIC</span></label>
+          <div class="field-control">
+            <input type="range" id="dispersal" min="1000" max="20000" step="500" value="5000">
+            <output id="dispersal-val">5 км</output>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel layers-panel">
+        <div class="panel-head"><h2>Слои карты</h2></div>
+        <div class="switch-list" id="layer-switches">
+          <label class="switch"><input type="checkbox" data-layer="resistance" checked><span class="track"></span><span class="switch-name">Сопротивление</span></label>
+          <label class="switch"><input type="checkbox" data-layer="landcover"><span class="track"></span><span class="switch-name">Землепокров</span></label>
+          <label class="switch"><input type="checkbox" data-layer="cost"><span class="track"></span><span class="switch-name">Стоимость доступа</span></label>
+          <label class="switch"><input type="checkbox" data-layer="hillshade" checked><span class="track"></span><span class="switch-name">Рельеф</span></label>
+          <label class="switch"><input type="checkbox" data-layer="roads" checked><span class="track"></span><span class="switch-name">Дороги и реки</span></label>
+          <label class="switch"><input type="checkbox" data-layer="labels" checked><span class="track"></span><span class="switch-name">Подписи</span></label>
+        </div>
+      </section>
+    </aside>
+
+    <section class="stage">
+      <div class="map-card" id="map-card">
+        <canvas id="map"></canvas>
+
+        <div class="map-topbar">
+          <div class="layer-tabs" id="layer-tabs">
+            <button class="chip active" data-base="resistance">Сопротивление</button>
+            <button class="chip" data-base="landcover">Землепокров</button>
+            <button class="chip" data-base="cost">Доступность</button>
+          </div>
+          <div class="map-tools">
+            <button class="tool" id="tool-route" title="Проложить маршрут (R)">
+              <svg viewBox="0 0 24 24" width="17" height="17"><path d="M4 19c5 0 4-14 9-14 3 0 4 3 4 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="4" cy="19" r="2.4" fill="currentColor"/><circle cx="17" cy="11" r="2.4" fill="currentColor"/></svg>
+            </button>
+            <button class="tool" id="tool-zoom-in" title="Приблизить">+</button>
+            <button class="tool" id="tool-zoom-out" title="Отдалить">−</button>
+            <button class="tool" id="tool-fit" title="Вся территория (F)">
+              <svg viewBox="0 0 24 24" width="16" height="16"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="route-banner" id="route-banner">
+          <b>Маршрут.</b> <span id="route-text">Кликните начальную точку</span>
+          <button class="link-btn" id="route-cancel">отменить</button>
+        </div>
+
+        <div class="legend" id="legend">
+          <div class="legend-title">Сопротивление</div>
+          <div class="legend-bar" id="legend-bar"></div>
+          <div class="legend-ticks"><span>1</span><span>10</span><span>100</span><span>1000</span></div>
+        </div>
+
+        <div class="map-readout">
+          <span id="readout-x">—</span>
+          <span class="sep"></span>
+          <span id="readout-lonlat">—</span>
+          <span class="sep"></span>
+          <span id="readout-r">—</span>
+        </div>
+
+        <div class="scalebar">
+          <div class="scalebar-line" id="scalebar-line"></div>
+          <span id="scalebar-label">10 км</span>
+        </div>
+
+        <div class="tooltip" id="tooltip"></div>
+
+        <div class="map-loading" id="loading">
+          <div class="spinner"></div>
+          <span id="loading-text">Расчёт сети коридоров…</span>
+        </div>
+
+        <div class="route-summary" id="route-summary">
+          <button class="close" id="route-close">×</button>
+          <div class="rs-title">Маршрут через сопротивление</div>
+          <div class="rs-grid">
+            <div><span>Длина</span><b id="rs-length">—</b></div>
+            <div><span>Стоимость</span><b id="rs-cost">—</b></div>
+            <div><span>Среднее R</span><b id="rs-mean">—</b></div>
+            <div><span>Прямая</span><b id="rs-straight">—</b></div>
+          </div>
+          <p class="rs-note" id="rs-note"></p>
+        </div>
+      </div>
+
+      <div class="statusbar">
+        <div class="status-left">
+          <span class="status-dot" id="status-dot"></span>
+          <span id="status-text">Инициализация…</span>
+        </div>
+        <div class="status-right">
+          <span id="status-elapsed">—</span>
+          <span class="sep"></span>
+          <span id="status-crs">EPSG:32637</span>
+          <span class="sep"></span>
+          <span id="status-res">100 м</span>
+          <a class="link-btn" id="btn-report" href="#" download>Отчёт ↓</a>
+          <a class="link-btn" id="btn-geojson" href="#" download>GeoJSON ↓</a>
+        </div>
+      </div>
+    </section>
+
+    <aside class="rail">
+      <section class="kpi-grid">
+        <div class="kpi">
+          <span class="kpi-label">MESH</span>
+          <b id="kpi-mesh">—</b>
+          <span class="kpi-unit">га</span>
+          <span class="kpi-delta" id="kpi-mesh-d"></span>
+        </div>
+        <div class="kpi">
+          <span class="kpi-label">PC</span>
+          <b id="kpi-pc">—</b>
+          <span class="kpi-unit">индекс</span>
+          <span class="kpi-delta" id="kpi-pc-d"></span>
+        </div>
+        <div class="kpi">
+          <span class="kpi-label">IIC</span>
+          <b id="kpi-iic">—</b>
+          <span class="kpi-unit">индекс</span>
+          <span class="kpi-delta" id="kpi-iic-d"></span>
+        </div>
+        <div class="kpi">
+          <span class="kpi-label">Сеть</span>
+          <b id="kpi-links">—</b>
+          <span class="kpi-unit">связей</span>
+          <span class="kpi-delta" id="kpi-links-d"></span>
+        </div>
+      </section>
+
+      <section class="panel rail-panel">
+        <div class="panel-head">
+          <h2>Сеть коридоров</h2>
+          <span class="panel-tag" id="net-tag">—</span>
+        </div>
+        <div class="mini-stats">
+          <div><span>Длина</span><b id="net-length">—</b></div>
+          <div><span>Площадь</span><b id="net-area">—</b></div>
+          <div><span>Переходы дорог</span><b id="net-cross">—</b></div>
+          <div><span>Резерв</span><b id="net-red">—</b></div>
+        </div>
+        <div class="corridor-list" id="corridor-list"></div>
+      </section>
+
+      <section class="panel rail-panel">
+        <div class="panel-head">
+          <h2>Узкие места</h2>
+          <span class="panel-tag warn" id="pinch-tag">—</span>
+        </div>
+        <p class="hint">Участки с высоким потоком связей и малой шириной — приоритет для охраны.</p>
+        <div class="pinch-list" id="pinch-list"></div>
+      </section>
+
+      <section class="panel rail-panel">
+        <div class="panel-head"><h2>Структура</h2></div>
+        <div class="struct-row">
+          <span>Патчей</span><b id="frag-patches">—</b>
+        </div>
+        <div class="struct-row">
+          <span>Крупнейший</span><b id="frag-largest">—</b>
+        </div>
+        <div class="struct-row">
+          <span>Плотность границ</span><b id="frag-edge">—</b>
+        </div>
+        <div class="struct-row">
+          <span>Фрагментация</span><b id="frag-division">—</b>
+        </div>
+        <div class="hist" id="patch-hist"></div>
+        <div class="hist-caption">распределение патчей по площади, га</div>
+      </section>
+    </aside>
+  </main>
+</div>
+
+<div class="modal" id="compare-modal" aria-hidden="true">
+  <div class="modal-card wide">
+    <header class="modal-head">
+      <div>
+        <span class="eyebrow">Сценарии</span>
+        <h2>Сравнение связности</h2>
+      </div>
+      <button class="modal-close" data-close>×</button>
+    </header>
+    <div class="modal-body" id="compare-body">
+      <div class="compare-loading"><div class="spinner"></div>Пересчёт сценариев…</div>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="method-modal" aria-hidden="true">
+  <div class="modal-card">
+    <header class="modal-head">
+      <div>
+        <span class="eyebrow">Методика</span>
+        <h2>Как считается связность</h2>
+      </div>
+      <button class="modal-close" data-close>×</button>
+    </header>
+    <div class="modal-body method-body">
+      <p class="lead">EcoCorridor строит относительную модель связности: от поверхности сопротивления через
+        наименьшие по стоимости пути к сети коридоров и индексам фрагментации.</p>
+
+      <h3>1. Поверхность сопротивления</h3>
+      <p>Базовая стоимость класса земного покрова умножается на поправки за уклон, дороги и застройку:</p>
+      <pre>R = R_lc · (1 + w_s·s) · (1 + w_r·e^(−d_r/350)) · (1 + w_u·e^(−d_u/1200))</pre>
+      <p>где <i>s</i> — уклон, нормированный до 22°, <i>d</i> — расстояние до ближайшей дороги / застройки.
+        Стоимость перехода между соседними ячейками — <i>d·(R_a+R_b)/2</i>. Веса w регулируются в левой панели.</p>
+
+      <h3>2. Least-cost path</h3>
+      <p>Растр превращается в граф 8-соседства (≈2,2 млн рёбер для 60×45 км при 100 м). Кратчайшие пути —
+        точный алгоритм Дейкстры на разреженной матрице (<code>scipy.sparse.csgraph</code>). Между каждой парой
+        ядер прогоняется один multi-source Дейкстра от всех ячеек ядра.</p>
+
+      <h3>3. Коридорная сеть</h3>
+      <p>Кандидаты — пары ядер ближе заданного порога. Остов — минимальное остовное дерево по стоимости связей
+        (<code>NetworkX</code>). Альтернативные коридоры добавляются, если их стоимость не превышает остовный путь
+        более чем в 1,25 раза. Поток в ячейке — число связей, проходящих через неё.</p>
+
+      <h3>4. Фрагментация и связность</h3>
+      <p>Патчи выделяются 8-связностью на маске естественных местообитаний. Эффективный размер сети:
+        <code>MESH = ΣAᵢ²/A</code>. Индексы:
+        <code>IIC = ΣΣ aᵢaⱼ/(1+nᵢⱼ)/A²</code> и <code>PC = ΣΣ aᵢaⱼ·e^(−dᵢⱼ/d₀)/A²</code>.
+        dPC показывает вклад каждого патча в связность.</p>
+
+      <h3>5. Узкие места</h3>
+      <p>Для каждой ячейки коридора считается локальная ширина (удвоенное расстояние до края коридора).
+        Оценка узкости — поток / ширина; локальные максимумы с потоком ≥ 1 попадают в список приоритетов.</p>
+
+      <div class="callout">
+        <b>Ограничения.</b> Демонстрационный ландшафт «Синий Бор» синтетический (60 × 45 км, EPSG:32637),
+        сопротивления относительны и не калиброваны по данным мечения. Модель предназначена для сравнения
+        сценариев между собой, а не для абсолютных выводов о проницаемости.
+      </div>
+
+      <h3>Источники</h3>
+      <ul class="refs">
+        <li>Adriaensen et al. (2003). The application of 'least-cost' modelling as a functional landscape model.</li>
+        <li>Jaeger (2000). Landscape division, splitting index, and effective mesh size.</li>
+        <li>Pascual-Hortal &amp; Saura (2006). Comparison and development of new graph-based landscape connectivity indices.</li>
+        <li>McRae et al. (2008). Using circuit theory to model connectivity in ecology, evolution, and conservation.</li>
+        <li>Barnes et al. (2014). Priority-flood: an optimal depression-filling algorithm.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="/static/js/api.js"></script>
+<script src="/static/js/map.js"></script>
+<script src="/static/js/charts.js"></script>
+<script src="/static/js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,26 @@
+{
+  "name": "Демонстрационный полигон «Синий Бор»",
+  "description": "Синтетический ландшафт 60 × 45 км: низкогорный хребет на севере, освоенная равнина на юге, четыре ООПТ.",
+  "crs": "EPSG:32637",
+  "resolution_m": 100.0,
+  "width": 600,
+  "height": 450,
+  "bounds": [
+    380000.0,
+    6060000.0,
+    440000.0,
+    6105000.0
+  ],
+  "synthetic": true,
+  "seed": 20240517,
+  "files": {
+    "dem": "dem.tif",
+    "landcover": "landcover.tif",
+    "classes": "landcover_classes.json",
+    "protected_areas": "protected_areas.geojson",
+    "roads": "roads.geojson",
+    "rivers": "rivers.geojson",
+    "settlements": "settlements.geojson",
+    "region": "region.geojson"
+  }
+}

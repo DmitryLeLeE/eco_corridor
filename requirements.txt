@@ -1,0 +1,11 @@
+# EcoCorridor runtime dependencies (tested with Python 3.11)
+numpy>=1.26
+pandas>=2.0
+geopandas>=1.0
+rasterio>=1.3
+shapely>=2.0
+pyproj>=3.5
+scipy>=1.10
+fastapi>=0.110
+uvicorn>=0.29
+pydantic>=2.6
