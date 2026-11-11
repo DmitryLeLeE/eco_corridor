@@ -1,7 +1,7 @@
 cff-version: 1.2.0
 message: "Если вы используете это ПО, пожалуйста, цитируйте его."
 title: "eco_corridor: ГИС-модель экологических коридоров и связности ландшафта"
-version: 0.3.0
+version: 0.3.1
 type: software
 authors:
   - family-names: "Papilin"
