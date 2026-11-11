@@ -101,7 +101,6 @@ def build_resistance(project: Project, params: ResistanceParams | None = None) -
         base_map[project.landcover == cls.code] = cls.resistance
     # Unknown classes (0 / missing) are treated as moderately permeable.
     base_map[project.landcover == 0] = 20.0
-    _ = project.class_resistance()
 
     slope = slope_degrees(project.dem, res)
     road_mask, urban_mask = pressure_masks(project)
@@ -132,7 +131,8 @@ def build_resistance(project: Project, params: ResistanceParams | None = None) -
 
     values = np.clip(values, 1.0, params.max_resistance)
     values = np.round(values, 3).astype(np.float32)
-    values[project.landcover == 1] = max(values[project.landcover == 1].max(initial=600.0), 600.0)
+    water = project.landcover == 1
+    values[water] = np.maximum(values[water], 600.0)
 
     stats = {
         "min": float(values.min()),

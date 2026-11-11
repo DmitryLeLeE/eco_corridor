@@ -1,15 +1,23 @@
 """Least-cost paths on a raster graph.
 
-The raster is converted into an 8-connected sparse graph.  Moving from cell *a*
-to a neighbouring cell *b* costs
+The raster is converted into a sparse graph (8 or 16 neighbours).  Moving from
+cell *a* to a neighbouring cell *b* costs
 
-    c(a, b) = d(a, b) * (R_a + R_b) / 2
+    c(a, b) = d(a, b) * mean(R over the cells the step crosses)
 
-where ``d`` is the planar distance between cell centres (cell size or its
-diagonal) and ``R`` the resistance.  Accumulated cost therefore has units of
-"metres of ideal habitat equivalent".  Paths are found with Dijkstra's
-algorithm (``scipy.sparse.csgraph``), which is exact for this graph and fast
-enough to recompute interactively for a few thousand by a few hundred cells.
+where ``d`` is the planar distance between cell centres and ``R`` the
+resistance.  For orthogonal steps the crossed cells are *a* and *b*; for
+diagonal and knight steps the cells that the segment passes next to are
+included as well ("block" averaging).  Plain endpoint averaging lets a path cut
+the corner between two diagonal barrier cells and cross a one-cell-wide road at
+the price of two forest cells; averaging over the crossed block removes that
+leak.  Accumulated cost has units of "metres of ideal habitat equivalent".
+Paths are found with Dijkstra's algorithm (``scipy.sparse.csgraph``), which is
+exact for this graph.
+
+The 8-neighbour graph over-estimates Euclidean distance by up to ~8 % in
+homogeneous terrain (elongation 1.082); the 16-neighbour graph reduces this to
+~2.7 % (1.027) at about twice the memory (Huber & Church 1985; Etherington 2020).
 """
 
 from __future__ import annotations
@@ -39,38 +47,80 @@ class CostPath:
         }
 
 
-class RasterGraph:
-    """8-connected weighted graph over a raster, built once and reused."""
+# (dy, dx) steps of the 8- and 16-neighbour graphs, listed once per undirected edge.
+_MOVES_8 = ((0, 1), (1, 0), (1, 1), (1, -1))
+_MOVES_16 = _MOVES_8 + ((1, 2), (2, 1), (1, -2), (2, -1))
 
-    def __init__(self, resistance: np.ndarray, res: float):
+
+def _crossed_offsets(dy: int, dx: int) -> list[tuple[int, int]]:
+    """Offsets (relative to the start cell) of the cells a step passes through.
+
+    Endpoints are excluded.  Orthogonal steps cross nothing else; a diagonal
+    step touches the two cells that share its corner; a knight step crosses the
+    two cells in the middle of the 2x3 block.
+    """
+    if (dy, dx) in ((0, 1), (1, 0)):
+        return []
+    if abs(dy) == 1 and abs(dx) == 1:
+        return [(0, dx), (dy, 0)]
+    if abs(dy) == 1 and abs(dx) == 2:
+        mid = dx // 2
+        return [(0, mid), (dy, mid)]
+    if abs(dy) == 2 and abs(dx) == 1:
+        mid = dy // 2
+        return [(mid, 0), (mid, dx)]
+    raise ValueError(f"unsupported step {(dy, dx)}")
+
+
+class RasterGraph:
+    """Weighted graph over a raster (8 or 16 neighbours), built once and reused."""
+
+    def __init__(self, resistance: np.ndarray, res: float, neighbours: int = 8, corner_mode: str = "block"):
+        if neighbours not in (8, 16):
+            raise ValueError("neighbours must be 8 or 16")
+        if corner_mode not in ("block", "pair"):
+            raise ValueError("corner_mode must be 'block' or 'pair'")
         self.shape = resistance.shape
         self.res = float(res)
         self.n = int(resistance.size)
+        self.neighbours = neighbours
+        self.corner_mode = corner_mode
         self._build(resistance)
 
     def _build(self, resistance: np.ndarray) -> None:
         h, w = self.shape
-        r = np.asarray(resistance, dtype=np.float64).ravel()
-        valid = np.isfinite(r) & (r > 0)
+        r2 = np.asarray(resistance, dtype=np.float64)
+        valid2 = np.isfinite(r2) & (r2 > 0)
+        r2z = np.where(valid2, r2, 0.0)
         idx = np.arange(self.n, dtype=np.int32).reshape(h, w)
 
         rows: list[np.ndarray] = []
         cols: list[np.ndarray] = []
         data: list[np.ndarray] = []
-        diag = self.res * math.sqrt(2.0)
 
-        for dy, dx, step in ((0, 1, self.res), (1, 0, self.res), (1, 1, diag), (1, -1, diag)):
-            ys_a, ys_b = slice(0, h - dy), slice(dy, h)
-            xs_a = slice(0, w - dx) if dx >= 0 else slice(-dx, w)
-            xs_b = slice(dx, w) if dx >= 0 else slice(0, w + dx)
+        def window(arr: np.ndarray, dy: int, dx: int, oy: int, ox: int) -> np.ndarray:
+            """arr sampled at (start cell + (oy, ox)) for every start cell of the step (dy, dx)."""
+            y0, y1 = 0, h - dy
+            x0, x1 = (0, w - dx) if dx >= 0 else (-dx, w)
+            return arr[y0 + oy : y1 + oy, x0 + ox : x1 + ox]
 
-            a = idx[ys_a, xs_a].ravel()
-            b = idx[ys_b, xs_b].ravel()
-            ok = valid[a] & valid[b]
+        for dy, dx in _MOVES_16 if self.neighbours == 16 else _MOVES_8:
+            if dy >= h or abs(dx) >= w:
+                continue
+            step = self.res * math.hypot(dy, dx)
+            ok = window(valid2, dy, dx, 0, 0) & window(valid2, dy, dx, dy, dx)
             if not ok.any():
                 continue
-            a, b = a[ok], b[ok]
-            cost = step * (r[a] + r[b]) / 2.0
+            total = window(r2z, dy, dx, 0, 0) + window(r2z, dy, dx, dy, dx)
+            count = np.full(total.shape, 2.0)
+            if self.corner_mode == "block":
+                for oy, ox in _crossed_offsets(dy, dx):
+                    v = window(valid2, dy, dx, oy, ox)
+                    total = total + np.where(v, window(r2z, dy, dx, oy, ox), 0.0)
+                    count = count + v
+            a = window(idx, dy, dx, 0, 0)[ok]
+            b = window(idx, dy, dx, dy, dx)[ok]
+            cost = step * (total / count)[ok]
             rows.extend([a, b])
             cols.extend([b, a])
             data.extend([cost, cost])

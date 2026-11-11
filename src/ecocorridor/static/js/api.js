@@ -19,10 +19,20 @@ const API = (() => {
       : response.text();
   }
 
+  const post = (url, body) => request(url, { method: "POST", body: JSON.stringify(body) });
+  let projectId = null;
+
   return {
-    project: () => request("/api/project"),
-    analyze: (scenario, params) => request("/api/analyze", { method: "POST", body: JSON.stringify({ scenario, params }) }),
-    compare: (scenarios, params) => request("/api/compare", { method: "POST", body: JSON.stringify({ scenarios, params }) }),
+    setProject: (id) => { projectId = id; },
+    projectId: () => projectId,
+    project: (id) => request("/api/project" + (id ? `?project_id=${encodeURIComponent(id)}` : "")),
+    projects: () => request("/api/projects"),
+    analyze: (scenario, params) => post("/api/analyze", { project_id: projectId, scenario, params }),
+    compare: (scenarios, params) => post("/api/compare", { project_id: projectId, scenarios, params }),
+    searchPlace: (q) => request(`/api/territory/search?q=${encodeURIComponent(q)}`),
+    planTerritory: (body) => post("/api/territory/plan", body),
+    loadTerritory: (body) => post("/api/territory/load", body),
+    job: (id) => request(`/api/territory/jobs/${encodeURIComponent(id)}`),
     route: (token, start, end) => request("/api/route", { method: "POST", body: JSON.stringify({ token, start, end }) }),
     sample: (token, x, y) => request(`/api/sample/${token}?x=${x.toFixed(1)}&y=${y.toFixed(1)}`),
     reportUrl: (token) => `/api/export/${token}/report.html`,

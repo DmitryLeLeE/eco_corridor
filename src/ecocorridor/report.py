@@ -41,13 +41,13 @@ def _map_svg(project: Project, result: AnalysisResult, width: int = 1180) -> str
 
     parts: list[str] = [f'<image href="data:image/png;base64,{image_b64}" x="0" y="0" width="{width}" height="{height}"/>']
 
-    parts.append('<g fill="#58e0a8" fill-opacity="0.10" stroke="#58e0a8" stroke-opacity="0.45" stroke-width="1">')
+    parts.append('<g fill="#0f5aa0" fill-opacity="0.06" stroke="#0f5aa0" stroke-opacity="0.4" stroke-width="1">')
     for geom in result.network.polygons.geometry:
         for poly in _polygons(geom):
             parts.append(_polygon_path(poly, pt))
     parts.append("</g>")
 
-    parts.append('<g fill="#6ff0b4" fill-opacity="0.16" stroke="#8dffc6" stroke-width="2">')
+    parts.append('<g fill="#14703f" fill-opacity="0.12" stroke="#14703f" stroke-width="1.6" stroke-dasharray="6 3">')
     for geom in result.cores.geometry:
         for poly in _polygons(geom):
             parts.append(_polygon_path(poly, pt))
@@ -56,20 +56,20 @@ def _map_svg(project: Project, result: AnalysisResult, width: int = 1180) -> str
     parts.append('<g fill="none" stroke-linecap="round" stroke-linejoin="round">')
     for row in result.network.lines.itertuples():
         path = " ".join(f"{x:.1f},{y:.1f}" for x, y in (pt(*c) for c in row.geometry.coords))
-        color = "#0e7a52" if row.type == "backbone" else "#8a6a2f"
-        parts.append(f'<polyline points="{path}" stroke="#eafff5" stroke-opacity="0.65" stroke-width="4.5"/>')
+        color = "#0a3d91" if row.type == "backbone" else "#7a3b00"
+        parts.append(f'<polyline points="{path}" stroke="#ffffff" stroke-opacity="0.9" stroke-width="4.8"/>')
         parts.append(f'<polyline points="{path}" stroke="{color}" stroke-width="2.4"/>')
     parts.append("</g>")
 
     parts.append('<g>')
     for row in result.network.pinchpoints.itertuples():
         x, y = pt(row.geometry.x, row.geometry.y)
-        parts.append(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="5" fill="#ffd166" stroke="#3a2a00" stroke-width="1.2"/>')
+        parts.append(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="5" fill="#c62828" stroke="#ffffff" stroke-width="1.4"/>')
     parts.append("</g>")
 
     label_style = (
         'font-family="Segoe UI, Arial, sans-serif" font-size="13" font-weight="600" '
-        'fill="#ffffff" stroke="#0b1512" stroke-width="3.2" paint-order="stroke" stroke-linejoin="round"'
+        'fill="#0b3d24" stroke="#ffffff" stroke-width="3.2" paint-order="stroke" stroke-linejoin="round"'
     )
     parts.append(f"<g {label_style}>")
     for row in result.cores.itertuples():
@@ -162,7 +162,7 @@ def build_report(project: Project, result: AnalysisResult) -> str:
 <meta charset="utf-8">
 <title>EcoCorridor — отчёт «{html.escape(project.name)}»</title>
 <style>
-  :root {{ --ink:#15221d; --muted:#5d6f66; --line:#d9e2dc; --accent:#0e7a52; --bg:#fbfaf6; }}
+  :root {{ --ink:#1b2733; --muted:#5b6b7a; --line:#d5dbe1; --accent:#0a3d91; --bg:#ffffff; }}
   * {{ box-sizing:border-box; }}
   body {{ margin:0; background:var(--bg); color:var(--ink);
          font-family:"Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; line-height:1.5; }}
@@ -177,7 +177,7 @@ def build_report(project: Project, result: AnalysisResult) -> str:
   .kpi {{ border:1px solid var(--line); background:#fff; border-radius:10px; padding:14px 16px; }}
   .kpi b {{ display:block; font-size:26px; font-weight:700; letter-spacing:-.02em; }}
   .kpi span {{ font-size:11.5px; color:var(--muted); text-transform:uppercase; letter-spacing:.08em; }}
-  figure {{ margin:26px 0 10px; border:1px solid var(--line); background:#0d1412; border-radius:12px; overflow:hidden; }}
+  figure {{ margin:26px 0 10px; border:1px solid var(--line); background:#eef1f3; border-radius:4px; overflow:hidden; }}
   .map-note {{ display:flex; justify-content:space-between; gap:20px; align-items:flex-start; padding:12px 16px; background:#fff; }}
   .legend {{ min-width:280px; }}
   .legend-bar {{ height:10px; border-radius:6px; }}
@@ -225,10 +225,10 @@ def build_report(project: Project, result: AnalysisResult) -> str:
         {_legend_html()}
       </div>
       <div class="map-legend">
-        <span><i class="dot" style="background:#8dffc6"></i>ядра ООПТ</span>
-        <span><i class="dot" style="background:#0e7a52"></i>опорные коридоры</span>
-        <span><i class="dot" style="background:#8a6a2f"></i>альтернативные</span>
-        <span><i class="dot" style="background:#ffd166"></i>узкие места</span>
+        <span><i class="dot" style="background:#14703f"></i>ядра ООПТ</span>
+        <span><i class="dot" style="background:#0a3d91"></i>опорные коридоры</span>
+        <span><i class="dot" style="background:#7a3b00"></i>альтернативные</span>
+        <span><i class="dot" style="background:#c62828"></i>узкие места</span>
       </div>
     </div>
   </figure>
@@ -275,12 +275,22 @@ def build_report(project: Project, result: AnalysisResult) -> str:
     удалённость от дорог и застройки:
     <code>R = R<sub>lc</sub> · (1 + w<sub>s</sub>·s) · (1 + w<sub>r</sub>·e<sup>−d<sub>r</sub>/D<sub>r</sub></sup>) · (1 + w<sub>u</sub>·e<sup>−d<sub>u</sub>/D<sub>u</sub></sup>)</code>.
     Стоимость перехода между соседними ячейками — <code>d · (R<sub>a</sub> + R<sub>b</sub>)/2</code>.</p>
-    <p><b>Наименьшая стоимость.</b> Взвешенный граф из 8-соседних ячеек, точный алгоритм Дейкстры. Сеть ядер строится
-    как минимальное остовное дерево по стоимости связей; дополнительно добавляются альтернативные коридоры, если они
-    не дороже остовного пути более чем в {_fmt(result.params.corridors.detour_ratio, 2)} раза.</p>
-    <p><b>Связность.</b> IIC = ΣΣ a<sub>i</sub>a<sub>j</sub>/(1+n<sub>ij</sub>)/A², PC = ΣΣ a<sub>i</sub>a<sub>j</sub>p<sub>ij</sub>/A²
-    с экспоненциальным ядром расселения (d₀ = {_fmt(frag.get('dispersal_m'), 0)} м). Узкие места — участки с высоким потоком
-    связей и малой локальной шириной коридора.</p>
+    <p><b>Наименьшая стоимость.</b> Взвешенный граф из ячеек растра ({result.params.corridors.neighbours}-соседство),
+    точный алгоритм Дейкстры. Стоимость ребра — длина шага, умноженная на среднее сопротивление пересекаемых ячеек,
+    поэтому диагональный путь не «протекает» между двумя соседними барьерами. Сеть ядер строится как минимальное
+    остовное дерево по стоимости связей; дополнительно добавляются альтернативные коридоры, если они не дороже
+    остовного пути более чем в {_fmt(result.params.corridors.detour_ratio, 2)} раза. Это оценка путей наименьшей стоимости
+    (least-cost path), а не модель токов по теории цепей (McRae et al. 2008) — она не учитывает множественность путей.</p>
+    <p><b>Связность.</b> Все индексы нормированы на площадь всего кадра A<sub>L</sub>
+    ({_fmt(frag.get('landscape_area_ha'), 0)} га). IIC = ΣΣ a<sub>i</sub>a<sub>j</sub>/(1+nl<sub>ij</sub>)/A<sub>L</sub>²,
+    где nl — число переходов на кратчайшем пути в бинарном графе (связь при расстоянии между краями ≤ d₀).
+    PC = ΣΣ a<sub>i</sub>a<sub>j</sub>p*<sub>ij</sub>/A<sub>L</sub>², где p*<sub>ij</sub> — максимальное произведение
+    вероятностей p = exp(−d/d₀) вдоль пути через промежуточные патчи, d₀ = {_fmt(frag.get('dispersal_m'), 0)} м
+    (расстояние, на котором вероятность падает в e раз; пары с p &lt; 0,01 не учитываются).
+    Расстояния — между ближайшими краями патчей по прямой, без учёта сопротивления поверхности.
+    ECA = √ΣΣ a<sub>i</sub>a<sub>j</sub>p*<sub>ij</sub>.</p>
+    <p><b>Узкие места.</b> Эвристика: поток числа связей, делённый на локальную ширину коридора; это не результат
+    анализа на токах и не «точки давления» в смысле Linkage Mapper.</p>
     <p><b>Ограничения.</b> Демонстрационный ландшафт синтетический; значения сопротивления относительны, а не
     откалиброваны по данным о перемещениях животных. Результат следует интерпретировать как сценарий
     относительного сравнения, а не как абсолютную оценку проницаемости.</p>

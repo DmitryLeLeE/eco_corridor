@@ -109,6 +109,13 @@ class MapView {
   _emitView() { if (this._onView) this._onView(this.view); }
 
   /* --------------------------------------------------------------- data */
+  clearImages() {
+    for (const raster of Object.values(this.rasters)) raster.img = null;
+    this.highlight = null;
+    this.hoverHit = null;
+    this.rasterDirty = true;
+  }
+
   setImages(layers) {
     for (const [name, url] of Object.entries(layers)) {
       if (!this.rasters[name] || !url) continue;
@@ -321,7 +328,7 @@ class MapView {
     const t = performance.now();
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     ctx.clearRect(0, 0, this.w, this.h);
-    ctx.fillStyle = "#070c0a";
+    ctx.fillStyle = "#eef1f3";
     ctx.fillRect(0, 0, this.w, this.h);
     if (!this.bounds) return;
 
@@ -373,10 +380,10 @@ class MapView {
     const startX = Math.ceil(l / step) * step;
     const startY = Math.ceil((this.bounds[1]) / step) * step;
     ctx.save();
-    ctx.strokeStyle = "rgba(210, 235, 222, 0.055)";
+    ctx.strokeStyle = "rgba(40, 60, 80, 0.13)";
     ctx.lineWidth = 1;
     ctx.font = "9px 'Cascadia Mono', monospace";
-    ctx.fillStyle = "rgba(200, 220, 210, 0.35)";
+    ctx.fillStyle = "rgba(40, 60, 80, 0.62)";
     ctx.beginPath();
     for (let x = startX; x < this.bounds[2]; x += step) {
       const px = Math.round(this.sx(x)) + 0.5;
@@ -404,14 +411,14 @@ class MapView {
   _drawHydro(ctx) {
     ctx.save();
     ctx.lineCap = "round";
-    ctx.strokeStyle = "rgba(112, 180, 210, 0.5)";
+    ctx.strokeStyle = "rgba(30, 110, 190, 0.75)";
     ctx.lineWidth = 1;
     ctx.beginPath();
     for (const river of this.data.rivers) {
       this._traceGeometry(ctx, river.geometry, 0);
     }
     ctx.stroke();
-    ctx.strokeStyle = "rgba(232, 220, 190, 0.45)";
+    ctx.strokeStyle = "rgba(55, 55, 60, 0.6)";
     ctx.lineWidth = 1.1;
     ctx.beginPath();
     for (const road of this.data.roads) this._traceGeometry(ctx, road.geometry, 0);
@@ -443,7 +450,7 @@ class MapView {
       ctx.beginPath();
       this._traceGeometry(ctx, area.geometry, 0);
       ctx.closePath();
-      ctx.fillStyle = isHi ? "rgba(120, 255, 200, 0.16)" : "rgba(91, 227, 166, 0.045)";
+      ctx.fillStyle = isHi ? "rgba(15, 90, 160, 0.16)" : "rgba(15, 90, 160, 0.06)";
       ctx.fill();
     }
     ctx.restore();
@@ -458,14 +465,13 @@ class MapView {
       const g = core.geometry;
       if (g.type === "Polygon") this._polygonPath(ctx, g.coordinates);
       if (g.type === "MultiPolygon") g.coordinates.forEach((poly) => this._polygonPath(ctx, poly));
-      ctx.fillStyle = isHi ? "rgba(120, 255, 200, 0.24)" : "rgba(91, 227, 166, 0.11)";
+      ctx.fillStyle = isHi ? "rgba(20, 110, 70, 0.28)" : "rgba(20, 110, 70, 0.12)";
       ctx.fill();
-      ctx.strokeStyle = isHi ? "rgba(200, 255, 230, 1)" : "rgba(140, 250, 195, 0.85)";
+      ctx.strokeStyle = isHi ? "#0b4f33" : "#14703f";
       ctx.lineWidth = isHi ? 2.4 : 1.4;
-      ctx.shadowColor = "rgba(91, 227, 166, 0.55)";
-      ctx.shadowBlur = isHi ? 16 : 8;
+      ctx.setLineDash(isHi ? [] : [6, 3]);
       ctx.stroke();
-      ctx.shadowBlur = 0;
+      ctx.setLineDash([]);
     }
     ctx.restore();
   }
@@ -493,13 +499,13 @@ class MapView {
     for (const corridor of corridors) {
       const isHi = highlighted === corridor._id;
       const dim = highlighted && !isHi;
-      const color = corridor.type === "backbone" ? "#3ef0a6" : "#f5c64f";
+      const color = corridor.type === "backbone" ? "#0a3d91" : "#7a3b00";
       const points = corridor.geometry.coordinates.map((c) => this.toScreen(c));
 
       ctx.globalAlpha = dim ? 0.26 : 1;
       ctx.beginPath();
       this._smoothPath(ctx, points);
-      ctx.strokeStyle = isHi ? "#f2fff9" : "rgba(4, 12, 9, 0.72)";
+      ctx.strokeStyle = isHi ? "#ffffff" : "rgba(255, 255, 255, 0.92)";
       ctx.lineWidth = isHi ? 7.5 : 5.6;
       ctx.stroke();
 
@@ -507,10 +513,7 @@ class MapView {
       this._smoothPath(ctx, points);
       ctx.strokeStyle = color;
       ctx.lineWidth = isHi ? 3.6 : 2.5;
-      ctx.shadowColor = color;
-      ctx.shadowBlur = isHi ? 20 : 7;
       ctx.stroke();
-      ctx.shadowBlur = 0;
       ctx.globalAlpha = 1;
     }
     ctx.restore();
@@ -538,7 +541,7 @@ class MapView {
       const hi = this.highlight?.id === pinch._id;
       ctx.beginPath();
       ctx.arc(x, y, r + 5 + pulse * 4, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(255, 209, 102, ${0.08 + pulse * 0.07})`;
+      ctx.fillStyle = `rgba(200, 40, 30, ${0.06 + pulse * 0.05})`;
       ctx.fill();
       ctx.beginPath();
       ctx.moveTo(x, y - r);
@@ -546,10 +549,10 @@ class MapView {
       ctx.lineTo(x, y + r);
       ctx.lineTo(x - r, y);
       ctx.closePath();
-      ctx.fillStyle = hi ? "#fff3cf" : "#ffd166";
+      ctx.fillStyle = hi ? "#ff8a80" : "#c62828";
       ctx.fill();
-      ctx.strokeStyle = "rgba(30, 22, 4, 0.85)";
-      ctx.lineWidth = 1.2;
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 1.4;
       ctx.stroke();
     }
     ctx.restore();
@@ -564,14 +567,14 @@ class MapView {
       const big = (settlement.population || 0) >= 5000;
       ctx.beginPath();
       ctx.arc(x, y, big ? 3.4 : 2.1, 0, Math.PI * 2);
-      ctx.fillStyle = "rgba(240, 232, 214, 0.9)";
+      ctx.fillStyle = "#ffffff";
       ctx.fill();
-      ctx.strokeStyle = "rgba(10, 18, 14, 0.8)";
+      ctx.strokeStyle = "rgba(20, 30, 40, 0.9)";
       ctx.lineWidth = 1;
       ctx.stroke();
       if (big && this.view.scale > 0.02) {
-        ctx.fillStyle = "rgba(245, 240, 228, 0.9)";
-        ctx.strokeStyle = "rgba(8, 14, 11, 0.85)";
+        ctx.fillStyle = "#1b2733";
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.92)";
         ctx.lineWidth = 3;
         ctx.strokeText(settlement.name, x + 7, y + 3);
         ctx.fillText(settlement.name, x + 7, y + 3);
@@ -597,9 +600,9 @@ class MapView {
       if (px < x0 || py < y0) continue;
       const label = core.name || "";
       ctx.lineWidth = 3.5;
-      ctx.strokeStyle = "rgba(6, 14, 10, 0.9)";
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.92)";
       ctx.strokeText(label, px, py);
-      ctx.fillStyle = "rgba(226, 255, 240, 0.95)";
+      ctx.fillStyle = "#0b3d24";
       ctx.fillText(label, px, py);
     }
     ctx.restore();
@@ -612,30 +615,30 @@ class MapView {
       const points = this.route.coords.map((c) => this.toScreen(c));
       ctx.beginPath();
       this._smoothPath(ctx, points);
-      ctx.strokeStyle = "rgba(255, 209, 102, 0.25)";
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.9)";
       ctx.lineWidth = 8;
       ctx.stroke();
       ctx.beginPath();
       this._smoothPath(ctx, points);
       ctx.setLineDash([7, 6]);
       ctx.lineDashOffset = -((t / 45) % 13);
-      ctx.strokeStyle = "#ffd166";
+      ctx.strokeStyle = "#b71c1c";
       ctx.lineWidth = 2.6;
       ctx.stroke();
       ctx.setLineDash([]);
       const start = this.toScreen(this.route.coords[0]);
       const end = this.toScreen(this.route.coords[this.route.coords.length - 1]);
-      this._marker(ctx, start, "#5be3a6");
-      this._marker(ctx, end, "#ffd166");
+      this._marker(ctx, start, "#14703f");
+      this._marker(ctx, end, "#b71c1c");
     }
-    for (const point of this.routePoints) this._marker(ctx, this.toScreen(point), "#ffd166");
+    for (const point of this.routePoints) this._marker(ctx, this.toScreen(point), "#b71c1c");
     ctx.restore();
   }
 
   _marker(ctx, [x, y], color) {
     ctx.beginPath();
     ctx.arc(x, y, 6.5, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(8, 14, 11, 0.9)";
+    ctx.fillStyle = "#ffffff";
     ctx.fill();
     ctx.strokeStyle = color;
     ctx.lineWidth = 2.4;

@@ -36,6 +36,7 @@ class CorridorParams:
     corridor_width_m: float = 250.0
     detour_ratio: float = 1.25
     alternate_links: bool = True
+    neighbours: int = 8
 
     def as_dict(self) -> dict:
         return {
@@ -43,6 +44,7 @@ class CorridorParams:
             "corridor_width_m": self.corridor_width_m,
             "detour_ratio": self.detour_ratio,
             "alternate_links": self.alternate_links,
+            "neighbours": self.neighbours,
         }
 
 
@@ -219,8 +221,7 @@ def build_network(
     total_length = float(lines.geometry.length.sum()) if len(lines) else 0.0
     road_crossings = 0
     if len(lines) and not project.roads.empty:
-        road_geoms = project.roads.geometry
-        road_crossings = int(sum(int(road_geoms.intersects(geom).sum()) for geom in lines.geometry if geom is not None))
+        road_crossings = _count_crossings(lines, project.roads)
 
     stats = {
         "link_count": len(selected),
@@ -275,15 +276,22 @@ def _tree_cost(tree: nx.Graph, a: int, b: int) -> float:
         return float("inf")
 
 
-def _count_crossings(lines: gpd.GeoDataFrame, roads) -> int:
+def _count_crossings(lines: gpd.GeoDataFrame, roads: gpd.GeoDataFrame) -> int:
+    """Number of places where corridor axes cross the road network.
+
+    Roads are dissolved first, so a road split into many OSM ways is counted
+    once per crossing, and a corridor running along a road counts once.
+    """
+    union = roads.geometry.union_all() if hasattr(roads.geometry, "union_all") else roads.geometry.unary_union
     crossings = 0
     for geom in lines.geometry:
-        if geom is None:
+        if geom is None or geom.is_empty:
             continue
-        inter = geom.intersection(roads)
+        inter = geom.intersection(union)
         if inter.is_empty:
             continue
-        crossings += 1 if inter.geom_type in ("LineString", "MultiLineString", "GeometryCollection") else 0
+        parts = getattr(inter, "geoms", [inter])
+        crossings += len(parts)
     return crossings
 
 

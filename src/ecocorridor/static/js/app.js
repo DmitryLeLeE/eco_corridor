@@ -56,31 +56,74 @@ const App = (() => {
   }
 
   /* -------------------------------------------------------------- startup */
-  async function init() {
+  let controlsBound = false;
+
+  function describeProject(project) {
+    const w = (project.bounds[2] - project.bounds[0]) / 1000;
+    const h = (project.bounds[3] - project.bounds[1]) / 1000;
+    const kind = project.synthetic ? " · синтетический" : project.online ? " · онлайн-данные" : "";
+    return `${fmt(w)} × ${fmt(h)} км · ${project.resolution_m} м · ${project.crs}${kind}`;
+  }
+
+  function renderSources(project) {
+    const panel = $("sources-panel");
+    const warnings = project.warnings || [];
+    const sources = project.sources || [];
+    panel.hidden = !(project.online && (warnings.length || sources.length));
+    $("sources-warnings").innerHTML = warnings.map((w) => `<div class="sources-warn">${escapeHtml(w)}</div>`).join("");
+    $("sources-list").innerHTML = sources.map((s) => `<li>${escapeHtml(s)}</li>`).join("");
+    $("sources-tag").textContent = project.core_source ? "ядра: " + (project.core_source.startsWith("OpenStreetMap") ? "ООПТ" : "леса") : "";
+  }
+
+  function escapeHtml(text) {
+    return String(text).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+
+  /** Load a project (the bundled demo or a downloaded territory) and run its base scenario. */
+  async function openProject(id) {
+    state.requestSeq += 1; // drop any analysis still in flight for the previous project
+    state.busy = false;
+    clearTimeout(runTimer);
     try {
-      const project = await API.project();
+      setLoading(true, "Открываю проект…");
+      const project = await API.project(id);
+      API.setProject(project.id);
       state.project = project;
-      state.params = { ...project.defaults };
+      state.result = null;
+      state.compareRows = null;
+      state.scenario = "base";
+      state.params = state.params ? readParams() : { ...project.defaults };
 
       $("project-name").textContent = project.name;
-      $("project-meta").textContent = `${fmt((project.bounds[2] - project.bounds[0]) / 1000)} × ${fmt((project.bounds[3] - project.bounds[1]) / 1000)} км · ${project.resolution_m} м · ${project.crs}${project.synthetic ? " · синтетический" : ""}`;
+      $("project-meta").textContent = describeProject(project);
       $("status-crs").textContent = project.crs;
       $("status-res").textContent = `${project.resolution_m} м`;
+      $("status-elapsed").textContent = "—";
+      renderSources(project);
 
-      map = new MapView($("map"), $("tooltip"));
-      window.mapView = map;
-      window.appState = state;
+      if (!map) {
+        map = new MapView($("map"), $("tooltip"));
+        window.mapView = map;
+        window.appState = state;
+        bindMap();
+      }
+      toggleRouteMode(false);
+      map.clearImages();
       map.setProject(project.bounds);
       map.setData(project, null);
       map.showRoads = state.layers.roads;
       map.showLabels = state.layers.labels;
-      bindMap();
 
       buildScenarios(project.scenarios);
-      syncControls();
-      bindControls();
-      bindShortcuts();
-      buildLegend("resistance");
+      if (!controlsBound) {
+        syncControls();
+        bindControls();
+        bindShortcuts();
+        controlsBound = true;
+      } else {
+        syncControls();
+      }
+      buildLegend(["resistance", "landcover", "cost"].find((n) => state.layers[n]) || "resistance");
 
       setStatus("Расчёт базового сценария…");
       await runAnalysis("base");
@@ -88,9 +131,11 @@ const App = (() => {
       console.error(error);
       setLoading(false);
       setStatus("Ошибка: " + error.message);
-      toast("Не удалось загрузить проект: " + error.message, true);
+      toast("Не удалось открыть проект: " + error.message, true);
     }
   }
+
+  const init = () => openProject(null);
 
   /* ----------------------------------------------------------- scenarios */
   function buildScenarios(scenarios) {
@@ -132,6 +177,8 @@ const App = (() => {
     $("detour").value = p.detour_ratio;
     $("dispersal").value = p.dispersal_m;
     $("mode").value = p.mode;
+    $("habitat").value = p.habitat || "natural";
+    $("neighbours").value = String(p.neighbours || 8);
     updateSliderOutputs();
     document.querySelectorAll(".scenario").forEach((node) => node.classList.toggle("active", node.dataset.id === state.scenario));
     const scenario = state.project?.scenarios.find((s) => s.id === state.scenario);
@@ -170,6 +217,8 @@ const App = (() => {
       corridor_width_m: Number($("width").value),
       detour_ratio: Number($("detour").value),
       dispersal_m: Number($("dispersal").value),
+      habitat: $("habitat").value,
+      neighbours: Number($("neighbours").value),
       min_patch_ha: 5,
       road_decay_m: 350,
       urban_decay_m: 1200,
@@ -186,6 +235,8 @@ const App = (() => {
       });
     });
     $("mode").addEventListener("change", scheduleRun);
+    $("habitat").addEventListener("change", scheduleRun);
+    $("neighbours").addEventListener("change", scheduleRun);
     $("btn-run").addEventListener("click", () => runAnalysis(state.scenario));
 
     document.querySelectorAll("[data-reset]").forEach((button) => {
@@ -201,6 +252,8 @@ const App = (() => {
           $("width").value = defaults.corridor_width_m;
           $("detour").value = defaults.detour_ratio;
           $("dispersal").value = defaults.dispersal_m;
+          $("habitat").value = defaults.habitat;
+          $("neighbours").value = String(defaults.neighbours);
         }
         updateSliderOutputs();
         runAnalysis(state.scenario);
@@ -234,6 +287,7 @@ const App = (() => {
 
     $("btn-compare").addEventListener("click", openCompare);
     $("btn-method").addEventListener("click", () => openModal("method-modal"));
+    $("btn-territory").addEventListener("click", () => { openModal("territory-modal"); window.Territory?.opened(); });
     document.querySelectorAll("[data-close]").forEach((button) => button.addEventListener("click", closeModals));
     document.querySelectorAll(".modal").forEach((modal) => {
       modal.addEventListener("click", (event) => { if (event.target === modal) closeModals(); });
@@ -267,11 +321,11 @@ const App = (() => {
     legend.style.display = "";
     if (kind === "cost") {
       title.textContent = "Стоимость доступа";
-      bar.style.background = "linear-gradient(90deg,#6eeebe,#4aaac2,#566cbe,#804a9e,#2e1e46)";
+      bar.style.background = "linear-gradient(90deg,#08306b,#2171b5,#6baed6,#c6dbef,#f7fbff)";
       legend.querySelector(".legend-ticks").innerHTML = "<span>0</span><span>25 %</span><span>50 %</span><span>100 %</span>";
     } else {
       title.textContent = "Сопротивление";
-      bar.style.background = "linear-gradient(90deg,#0f3d33,#2b6e52,#7fa05e,#d8c173,#e08a4a,#c9503f,#8e2f3e)";
+      bar.style.background = "linear-gradient(90deg,#ffffcc,#fed976,#fd8d3c,#e31a1c,#800026)";
       legend.querySelector(".legend-ticks").innerHTML = "<span>1</span><span>10</span><span>100</span><span>1000</span>";
     }
   }
@@ -429,7 +483,6 @@ const App = (() => {
 
   function renderPinchList(result) {
     const container = $("pinch-list");
-    const pins = result.network.nodes ? result.pinchpoints.features : [];
     const features = result.pinchpoints.features || [];
     $("pinch-tag").textContent = String(features.length);
     if (!features.length) {
@@ -495,7 +548,7 @@ const App = (() => {
       if (world) {
         $("readout-x").textContent = `${fmt(world[0] / 1000, 1)} / ${fmt(world[1] / 1000, 1)} км`;
         const lonlat = toLonLat(world[0], world[1]);
-        $("readout-lonlat").textContent = `${lonlat[1].toFixed(4)}° N, ${lonlat[0].toFixed(4)}° E`;
+        $("readout-lonlat").textContent = `${Math.abs(lonlat[1]).toFixed(4)}° ${lonlat[1] >= 0 ? "N" : "S"}, ${Math.abs(lonlat[0]).toFixed(4)}° ${lonlat[0] >= 0 ? "E" : "W"}`;
         scheduleSample(world);
       }
     };
@@ -648,7 +701,7 @@ const App = (() => {
     });
   }
 
-  return { init };
+  return { init, openProject, toast, openModal, closeModals, currentId: () => state.project?.id };
 })();
 
-document.addEventListener("DOMContentLoaded", App.init);
+document.addEventListener("DOMContentLoaded", () => App.init());

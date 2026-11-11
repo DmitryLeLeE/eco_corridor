@@ -34,6 +34,7 @@
     </div>
 
     <nav class="topnav">
+      <button class="nav-btn accent" id="btn-territory">Территория</button>
       <button class="nav-btn" id="btn-method">Методика</button>
       <button class="nav-btn" id="btn-compare">Сценарии</button>
       <button class="btn primary" id="btn-run">
@@ -96,6 +97,21 @@
           <button class="link-btn" data-reset="corridors">сброс</button>
         </div>
         <div class="field">
+          <label for="habitat">Местообитание<span class="field-hint">для PC / IIC</span></label>
+          <select id="habitat" class="select">
+            <option value="natural">Любые природные</option>
+            <option value="forest">Лес</option>
+            <option value="forest_wetland">Лес и болота</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="neighbours">Соседство ячеек<span class="field-hint">точность путей</span></label>
+          <select id="neighbours" class="select">
+            <option value="8">8 направлений</option>
+            <option value="16">16 направлений</option>
+          </select>
+        </div>
+        <div class="field">
           <label for="max-link">Максимальная связь<span class="field-hint">между ядрами</span></label>
           <div class="field-control">
             <input type="range" id="max-link" min="5" max="80" step="1" value="34">
@@ -123,6 +139,12 @@
             <output id="dispersal-val">5 км</output>
           </div>
         </div>
+      </section>
+
+      <section class="panel" id="sources-panel" hidden>
+        <div class="panel-head"><h2>Данные</h2><span class="panel-tag" id="sources-tag">OSM</span></div>
+        <div id="sources-warnings"></div>
+        <ul class="sources-list" id="sources-list"></ul>
       </section>
 
       <section class="panel layers-panel">
@@ -308,6 +330,78 @@
   </div>
 </div>
 
+<div class="modal" id="territory-modal" aria-hidden="true">
+  <div class="modal-card">
+    <header class="modal-head">
+      <div>
+        <span class="eyebrow">Онлайн-данные</span>
+        <h2>Загрузить территорию</h2>
+      </div>
+      <button class="modal-close" data-close>×</button>
+    </header>
+    <div class="modal-body territory-body">
+      <form class="t-search" id="t-search-form" autocomplete="off">
+        <input type="search" id="t-query" class="input" placeholder="Название: «Хвалынский национальный парк», «Пенза», «Алтай»…" maxlength="200">
+        <button class="btn primary" type="submit" id="t-search-btn">Найти</button>
+      </form>
+      <div class="t-places" id="t-places"></div>
+
+      <details class="t-manual" id="t-manual">
+        <summary>или задать центр координатами</summary>
+        <div class="t-grid">
+          <label>Долгота<input type="number" class="input" id="t-lon" step="0.0001" min="-180" max="180"></label>
+          <label>Широта<input type="number" class="input" id="t-lat" step="0.0001" min="-84" max="84"></label>
+        </div>
+      </details>
+
+      <div class="t-options" id="t-options" hidden>
+        <div class="t-selected" id="t-selected"></div>
+        <div class="t-grid">
+          <label>Сторона кадра, км
+            <input type="number" class="input" id="t-size" min="20" max="122" step="5" value="50">
+          </label>
+          <label>Разрешение
+            <select class="select" id="t-res">
+              <option value="">автоматически</option>
+              <option value="30">30 м</option>
+              <option value="60">60 м</option>
+              <option value="100">100 м</option>
+              <option value="200">200 м</option>
+              <option value="500">500 м</option>
+            </select>
+          </label>
+          <label>Ядра (источники популяций)
+            <select class="select" id="t-cores">
+              <option value="auto">ООПТ, иначе крупные леса</option>
+              <option value="protected">только ООПТ из OSM</option>
+              <option value="habitat">крупные массивы леса / природных земель</option>
+            </select>
+          </label>
+          <label>Мин. площадь ядра, га
+            <input type="number" class="input" id="t-mincore" min="10" max="100000" step="10" value="100">
+          </label>
+        </div>
+        <div class="t-plan" id="t-plan"></div>
+        <div class="t-progress" id="t-progress" hidden>
+          <div class="t-bar"><span id="t-bar-fill"></span></div>
+          <div class="t-progress-text" id="t-progress-text">—</div>
+        </div>
+        <div class="t-actions">
+          <button class="btn primary" id="t-load">Загрузить и рассчитать</button>
+          <label class="t-force"><input type="checkbox" id="t-force"> игнорировать кэш</label>
+        </div>
+      </div>
+
+      <h3 class="t-sub">Уже загружено</h3>
+      <div class="t-cached" id="t-cached"></div>
+
+      <p class="hint t-note">Землепокров — ESA WorldCover 10 м (2021), рельеф — Copernicus DEM, дороги, реки, населённые пункты
+        и охраняемые территории — OpenStreetMap. Данные скачиваются на сервер один раз и кэшируются. Размер кадра ограничен
+        15 000 км²; для территорий крупнее берётся центральный квадрат.</p>
+    </div>
+  </div>
+</div>
+
 <div class="modal" id="method-modal" aria-hidden="true">
   <div class="modal-card">
     <header class="modal-head">
@@ -323,43 +417,53 @@
 
       <h3>1. Поверхность сопротивления</h3>
       <p>Базовая стоимость класса земного покрова умножается на поправки за уклон, дороги и застройку:</p>
-      <pre>R = R_lc · (1 + w_s·s) · (1 + w_r·e^(−d_r/350)) · (1 + w_u·e^(−d_u/1200))</pre>
+      <pre>R = R_lc · (1 + w_s·s) · (1 + w_r·e^(−d_r/D_r)) · (1 + w_u·e^(−d_u/D_u))</pre>
       <p>где <i>s</i> — уклон, нормированный до 22°, <i>d</i> — расстояние до ближайшей дороги / застройки.
-        Стоимость перехода между соседними ячейками — <i>d·(R_a+R_b)/2</i>. Веса w регулируются в левой панели.</p>
+        Веса w регулируются в левой панели. Стоимости классов — экспертные и относительные, не калиброваны
+        по данным о перемещениях животных.</p>
 
-      <h3>2. Least-cost path</h3>
-      <p>Растр превращается в граф 8-соседства (≈2,2 млн рёбер для 60×45 км при 100 м). Кратчайшие пути —
-        точный алгоритм Дейкстры на разреженной матрице (<code>scipy.sparse.csgraph</code>). Между каждой парой
-        ядер прогоняется один multi-source Дейкстра от всех ячеек ядра.</p>
+      <h3>2. Путь наименьшей стоимости</h3>
+      <p>Растр превращается в граф с 8 или 16 соседями (16 уменьшает направленное смещение: наибольшее удлинение пути
+        1,03 вместо 1,08). Стоимость ребра — длина шага, умноженная на среднее сопротивление ячеек, которые шаг
+        пересекает; поэтому диагональ не проходит «между» двумя барьерами. Кратчайшие пути ищет алгоритм Дейкстры
+        (<code>scipy.sparse.csgraph</code>); от каждого ядра запускается один multi-source расчёт.</p>
 
       <h3>3. Коридорная сеть</h3>
       <p>Кандидаты — пары ядер ближе заданного порога. Остов — минимальное остовное дерево по стоимости связей
         (<code>NetworkX</code>). Альтернативные коридоры добавляются, если их стоимость не превышает остовный путь
-        более чем в 1,25 раза. Поток в ячейке — число связей, проходящих через неё.</p>
+        более чем в заданное число раз (по умолчанию 1,25). Поток в ячейке — число связей, проходящих через неё.
+        Это метод least-cost path; он не учитывает множественность возможных путей, как модели на теории цепей.</p>
 
       <h3>4. Фрагментация и связность</h3>
-      <p>Патчи выделяются 8-связностью на маске естественных местообитаний. Эффективный размер сети:
-        <code>MESH = ΣAᵢ²/A</code>. Индексы:
-        <code>IIC = ΣΣ aᵢaⱼ/(1+nᵢⱼ)/A²</code> и <code>PC = ΣΣ aᵢaⱼ·e^(−dᵢⱼ/d₀)/A²</code>.
-        dPC показывает вклад каждого патча в связность.</p>
+      <p>Патчи выделяются 8-связностью на маске выбранных местообитаний. Все показатели нормированы на площадь
+        всего кадра A<sub>L</sub>: <code>MESH = ΣAᵢ²/A_L</code> (Jaeger 2000).
+        <code>PC = ΣΣ aᵢaⱼ·p*ᵢⱼ / A_L²</code>, где p*ᵢⱼ — максимальное произведение вероятностей
+        <code>e^(−d/d₀)</code> по цепочке патчей (Saura &amp; Pascual-Hortal 2007);
+        <code>IIC = ΣΣ aᵢaⱼ/(1+nlᵢⱼ) / A_L²</code> по бинарному графу со связью при d ≤ d₀ (Pascual-Hortal &amp; Saura 2006).
+        dPC — относительная потеря PC при удалении патча (Saura &amp; Rubio 2010).
+        Расстояния между патчами — по прямой между ближайшими краями.</p>
 
       <h3>5. Узкие места</h3>
-      <p>Для каждой ячейки коридора считается локальная ширина (удвоенное расстояние до края коридора).
-        Оценка узкости — поток / ширина; локальные максимумы с потоком ≥ 1 попадают в список приоритетов.</p>
+      <p>Эвристика: для каждой ячейки коридора считается локальная ширина (удвоенное расстояние до края коридора);
+        оценка — поток / ширина, берутся локальные максимумы с потоком ≥ 1. Это не «pinch points» в смысле
+        Linkage Mapper / Circuitscape (там они определяются по плотности тока).</p>
 
       <div class="callout">
-        <b>Ограничения.</b> Демонстрационный ландшафт «Синий Бор» синтетический (60 × 45 км, EPSG:32637),
-        сопротивления относительны и не калиброваны по данным мечения. Модель предназначена для сравнения
-        сценариев между собой, а не для абсолютных выводов о проницаемости.
+        <b>Ограничения.</b> Модель относительная: она предназначена для сравнения сценариев на одной территории,
+        а не для абсолютных выводов о проницаемости. Землепокров ESA WorldCover имеет общую точность около 77 %,
+        дороги из OpenStreetMap неполны в малонаселённых районах. Демонстрационный ландшафт «Синий Бор»
+        синтетический. Подробный разбор — в docs/METHODOLOGY_REVIEW.md.
       </div>
 
       <h3>Источники</h3>
       <ul class="refs">
-        <li>Adriaensen et al. (2003). The application of 'least-cost' modelling as a functional landscape model.</li>
-        <li>Jaeger (2000). Landscape division, splitting index, and effective mesh size.</li>
-        <li>Pascual-Hortal &amp; Saura (2006). Comparison and development of new graph-based landscape connectivity indices.</li>
-        <li>McRae et al. (2008). Using circuit theory to model connectivity in ecology, evolution, and conservation.</li>
-        <li>Barnes et al. (2014). Priority-flood: an optimal depression-filling algorithm.</li>
+        <li>Adriaensen et al. (2003). The application of 'least-cost' modelling as a functional landscape model. Landscape and Urban Planning 64.</li>
+        <li>Jaeger (2000). Landscape division, splitting index, and effective mesh size. Landscape Ecology 15.</li>
+        <li>Pascual-Hortal &amp; Saura (2006). Comparison and development of new graph-based landscape connectivity indices. Landscape Ecology 21.</li>
+        <li>Saura &amp; Pascual-Hortal (2007). A new habitat availability index to integrate connectivity in landscape conservation planning. Landscape and Urban Planning 83.</li>
+        <li>Saura &amp; Rubio (2010). A common currency for the different ways in which patches and links can contribute to habitat availability and connectivity. Ecography 33.</li>
+        <li>McRae et al. (2008). Using circuit theory to model connectivity in ecology, evolution, and conservation. Ecology 89 — альтернативный метод, в программе не реализован.</li>
+        <li>Zanaga et al. (2022). ESA WorldCover 10 m 2021 v200; Copernicus DEM GLO-30; © участники OpenStreetMap (ODbL) — для загружаемых территорий.</li>
       </ul>
     </div>
   </div>
@@ -371,5 +475,6 @@
 <script src="/static/js/map.js"></script>
 <script src="/static/js/charts.js"></script>
 <script src="/static/js/app.js"></script>
+<script src="/static/js/territory.js"></script>
 </body>
 </html>

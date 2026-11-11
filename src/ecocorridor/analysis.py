@@ -37,6 +37,7 @@ class ModelParams:
 @dataclass
 class AnalysisResult:
     token: str
+    project: Project
     scenario: Scenario
     params: ModelParams
     surface: ResistanceSurface
@@ -78,8 +79,10 @@ def run(project: Project, scenario: Scenario, params: ModelParams | None = None)
 
     started = time.perf_counter()
     surface = build_resistance(project, params.resistance)
-    resistance, landcover, habitat, scenario_summary = apply_scenario(project, surface, scenario)
-    graph = RasterGraph(resistance, project.res)
+    resistance, landcover, habitat, scenario_summary = apply_scenario(
+        project, surface, scenario, params.fragmentation.natural_codes
+    )
+    graph = RasterGraph(resistance, project.res, neighbours=params.corridors.neighbours)
     network = build_network(project, graph, resistance, params.corridors)
 
     view = project
@@ -95,6 +98,7 @@ def run(project: Project, scenario: Scenario, params: ModelParams | None = None)
     elapsed = round(time.perf_counter() - started, 2)
     result = AnalysisResult(
         token=token,
+        project=project,
         scenario=scenario,
         params=params,
         surface=surface,
@@ -118,6 +122,12 @@ def run(project: Project, scenario: Scenario, params: ModelParams | None = None)
 
 def get(token: str) -> AnalysisResult | None:
     return _CACHE.get(token)
+
+
+def forget_project(project_id: str) -> None:
+    """Drop cached results of a project whose data has been replaced."""
+    for token in [t for t, r in _CACHE.items() if r.project.id == project_id]:
+        del _CACHE[token]
 
 
 def _with_landcover(project: Project, landcover: np.ndarray) -> Project:

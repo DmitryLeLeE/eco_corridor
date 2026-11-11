@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -16,6 +17,7 @@ from rasterio.transform import Affine
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEMO_DIR = REPO_ROOT / "data" / "demo"
+CACHE_DIR = Path(os.environ.get("ECOCORRIDOR_CACHE", REPO_ROOT / "data" / "cache"))
 
 
 @dataclass(frozen=True)
@@ -107,6 +109,74 @@ class Project:
 
     def class_resistance(self) -> dict[int, float]:
         return {c.code: c.resistance for c in self.classes}
+
+    # -- persistence --------------------------------------------------------
+    def to_directory(self, path: str | Path) -> Path:
+        """Write the project in the same layout ``from_directory`` reads."""
+        path = Path(path)
+        path.mkdir(parents=True, exist_ok=True)
+        profile = {
+            "driver": "GTiff",
+            "height": self.height,
+            "width": self.width,
+            "count": 1,
+            "crs": self.crs,
+            "transform": self.transform,
+            "compress": "deflate",
+        }
+        with rasterio.open(path / "landcover.tif", "w", dtype="uint8", nodata=0, **profile) as dst:
+            dst.write(self.landcover.astype("uint8"), 1)
+        with rasterio.open(path / "dem.tif", "w", dtype="float32", nodata=-9999.0, **profile) as dst:
+            dst.write(np.where(np.isfinite(self.dem), self.dem, -9999.0).astype("float32"), 1)
+        (path / "landcover_classes.json").write_text(
+            json.dumps(
+                {
+                    "field": "class",
+                    "classes": [
+                        {"code": c.code, "name": c.name, "color": c.color, "resistance": c.resistance}
+                        for c in self.classes
+                    ],
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        files = {"dem": "dem.tif", "landcover": "landcover.tif", "classes": "landcover_classes.json"}
+        for key, gdf in (
+            ("protected_areas", self.cores),
+            ("roads", self.roads),
+            ("rivers", self.rivers),
+            ("settlements", self.settlements),
+            ("region", self.region),
+        ):
+            if gdf is None or gdf.empty:
+                continue
+            fname = f"{key}.geojson"
+            out = gdf.copy()
+            # GeoJSON cannot store list / dict columns.
+            for column in out.columns:
+                if column != "geometry" and out[column].map(lambda v: isinstance(v, (list, dict, tuple))).any():
+                    out[column] = out[column].map(lambda v: json.dumps(v, ensure_ascii=False) if isinstance(v, (list, dict, tuple)) else v)
+            out.to_file(path / fname, driver="GeoJSON")
+            files[key] = fname
+        meta = dict(self.meta)
+        meta.update(
+            {
+                "id": self.id,
+                "name": self.name,
+                "description": self.description,
+                "crs": self.crs,
+                "resolution_m": self.res,
+                "width": self.width,
+                "height": self.height,
+                "bounds": list(self.bounds),
+                "synthetic": self.synthetic,
+                "files": files,
+            }
+        )
+        (path / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+        return path
 
     # -- loading ------------------------------------------------------------
     @classmethod

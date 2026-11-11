@@ -4,34 +4,66 @@ from __future__ import annotations
 
 import csv
 import io
-import numpy as np
 import json
-import math
+import logging
+import threading
 import time
+import uuid
 from collections import OrderedDict
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, replace
 from pathlib import Path
+from typing import Literal
 
-from fastapi import FastAPI, HTTPException, Response
+import numpy as np
+from fastapi import FastAPI, HTTPException, Query, Response
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import __version__, analysis as analysis_mod, render
-from .analysis import ModelParams, get, route, run, serialize
+from . import __version__, online, render
+from .analysis import ModelParams, forget_project, get, route, run, serialize
 from .corridors import CorridorParams
-from .dataset import Project, load_demo
-from .fragmentation import FragmentationParams
+from .dataset import CACHE_DIR, Project, load_demo
+from .fragmentation import HABITAT_PRESETS, FragmentationParams
 from .resistance import ResistanceParams
 from .scenarios import Scenario, default_scenarios
+
+log = logging.getLogger("ecocorridor")
 
 STATIC_DIR = Path(__file__).parent / "static"
 
 app = FastAPI(title="EcoCorridor", version=__version__, description="Моделирование экологических коридоров")
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
-PROJECT: Project = load_demo()
-SCENARIOS: dict[str, Scenario] = {s.id: s for s in default_scenarios(PROJECT)}
+DEFAULT_PROJECT_ID = "demo"
+PROJECTS: dict[str, Project] = {}
+SCENARIOS: dict[str, dict[str, Scenario]] = {}
+_PROJECT_LOCK = threading.Lock()
+
+
+def register_project(project: Project) -> Project:
+    with _PROJECT_LOCK:
+        if project.id in PROJECTS and PROJECTS[project.id] is not project:
+            forget_project(project.id)
+        PROJECTS[project.id] = project
+        SCENARIOS[project.id] = {s.id: s for s in default_scenarios(project)}
+    return project
+
+
+def get_project(project_id: str | None) -> Project:
+    """Registered project, or one restored from the on-disk cache."""
+    project_id = project_id or DEFAULT_PROJECT_ID
+    project = PROJECTS.get(project_id)
+    if project is not None:
+        return project
+    cached = CACHE_DIR / project_id
+    if project_id.isalnum() and (cached / "meta.json").exists():
+        return register_project(Project.from_directory(cached, project_id=project_id))
+    raise HTTPException(status_code=404, detail=f"Unknown project: {project_id}")
+
+
+register_project(load_demo(DEFAULT_PROJECT_ID))
 
 
 class ParamsModel(BaseModel):
@@ -47,18 +79,48 @@ class ParamsModel(BaseModel):
     detour_ratio: float = Field(1.25, ge=1.0, le=3.0)
     dispersal_m: float = Field(5000.0, ge=500.0, le=50000.0)
     min_patch_ha: float = Field(5.0, ge=0.5, le=200.0)
+    neighbours: Literal[8, 16] = 8
+    habitat: Literal["natural", "forest", "forest_wetland"] = "natural"
     urban_growth_m: float | None = Field(None, ge=0.0, le=5000.0)
     restoration: float | None = Field(None, ge=0.0, le=0.9)
 
 
 class AnalyzeRequest(BaseModel):
+    project_id: str | None = None
     scenario: str = "base"
     params: ParamsModel = Field(default_factory=ParamsModel)
 
 
 class CompareRequest(BaseModel):
+    project_id: str | None = None
     scenarios: list[str] = Field(default_factory=lambda: ["base", "urban", "road", "restore"])
     params: ParamsModel = Field(default_factory=ParamsModel)
+
+
+class TerritoryModel(BaseModel):
+    query: str | None = Field(None, max_length=200)
+    place_index: int = Field(0, ge=0, le=20)
+    bbox: list[float] | None = Field(None, min_length=4, max_length=4, description="west, south, east, north (WGS84)")
+    center: list[float] | None = Field(None, min_length=2, max_length=2, description="lon, lat (WGS84)")
+    size_km: float | None = Field(None, ge=5.0, le=400.0)
+    resolution_m: float | None = Field(None, ge=10.0, le=2000.0)
+    core_source: Literal["auto", "protected", "habitat"] = "auto"
+    min_core_ha: float = Field(100.0, ge=10.0, le=100_000.0)
+    name: str | None = Field(None, max_length=120)
+    force: bool = False
+
+    def to_request(self) -> online.TerritoryRequest:
+        return online.TerritoryRequest(
+            query=self.query,
+            bbox=tuple(self.bbox) if self.bbox else None,  # type: ignore[arg-type]
+            center=tuple(self.center) if self.center else None,  # type: ignore[arg-type]
+            size_km=self.size_km,
+            resolution_m=self.resolution_m,
+            core_source=self.core_source,
+            min_core_ha=self.min_core_ha,
+            name=self.name,
+            place_index=self.place_index,
+        )
 
 
 class RouteRequest(BaseModel):
@@ -67,8 +129,8 @@ class RouteRequest(BaseModel):
     end: tuple[float, float]
 
 
-def _scenario(scenario_id: str, params: ParamsModel) -> Scenario:
-    scenario = SCENARIOS.get(scenario_id)
+def _scenario(project: Project, scenario_id: str, params: ParamsModel) -> Scenario:
+    scenario = SCENARIOS[project.id].get(scenario_id)
     if scenario is None:
         raise HTTPException(status_code=404, detail=f"Unknown scenario: {scenario_id}")
     overrides = {}
@@ -90,11 +152,16 @@ def _params(params: ParamsModel) -> ModelParams:
             urban_decay_m=params.urban_decay_m,
             slope_ref_deg=params.slope_ref_deg,
         ),
-        fragmentation=FragmentationParams(dispersal_m=params.dispersal_m, min_patch_ha=params.min_patch_ha),
+        fragmentation=FragmentationParams(
+            dispersal_m=params.dispersal_m,
+            min_patch_ha=params.min_patch_ha,
+            natural_codes=HABITAT_PRESETS[params.habitat],
+        ),
         corridors=CorridorParams(
             max_link_km=params.max_link_km,
             corridor_width_m=params.corridor_width_m,
             detour_ratio=params.detour_ratio,
+            neighbours=params.neighbours,
         ),
     )
 
@@ -112,54 +179,154 @@ def index() -> FileResponse:
 
 @app.get("/api/health")
 def health() -> dict:
-    return {"status": "ok", "version": __version__, "project": PROJECT.id}
+    return {"status": "ok", "version": __version__, "project": DEFAULT_PROJECT_ID}
 
 
-@app.get("/api/project")
-def project_info() -> dict:
+def _project_payload(project: Project) -> dict:
     defaults = ParamsModel()
+    meta = project.meta or {}
     return {
-        "id": PROJECT.id,
-        "name": PROJECT.name,
-        "description": PROJECT.description,
-        "crs": PROJECT.crs,
-        "bounds": PROJECT.bounds,
-        "resolution_m": PROJECT.res,
-        "width": PROJECT.width,
-        "height": PROJECT.height,
-        "extent_lonlat": PROJECT.extent_lonlat(),
-        "synthetic": PROJECT.synthetic,
-        "classes": [asdict(c) for c in PROJECT.classes],
-        "scenarios": [s.as_dict() for s in SCENARIOS.values()],
+        "id": project.id,
+        "name": project.name,
+        "description": project.description,
+        "crs": project.crs,
+        "bounds": project.bounds,
+        "resolution_m": project.res,
+        "width": project.width,
+        "height": project.height,
+        "extent_lonlat": project.extent_lonlat(),
+        "synthetic": project.synthetic,
+        "online": bool(meta.get("online")),
+        "sources": meta.get("sources", []),
+        "warnings": meta.get("warnings", []),
+        "core_source": meta.get("core_source"),
+        "classes": [asdict(c) for c in project.classes],
+        "scenarios": [s.as_dict() for s in SCENARIOS[project.id].values()],
         "layers": {
-            "cores": _fc(PROJECT.cores, keep=["name", "kind", "area_ha"]),
-            "roads": _fc(PROJECT.roads, keep=["name", "width_m"]),
-            "rivers": _fc(PROJECT.rivers, keep=["name", "order", "width_m"]),
-            "settlements": _fc(PROJECT.settlements, keep=["name", "population", "kind"]),
-            "region": _fc(PROJECT.region, keep=[]),
+            "cores": _fc(project.cores, keep=["name", "kind", "area_ha"]),
+            "roads": _fc(project.roads, keep=["name", "width_m", "kind"]),
+            "rivers": _fc(project.rivers, keep=["name", "order", "width_m"]),
+            "settlements": _fc(project.settlements, keep=["name", "population", "kind"]),
+            "region": _fc(project.region, keep=[]),
         },
         "defaults": defaults.model_dump(),
         "version": __version__,
     }
 
 
+@app.get("/api/project")
+def project_info(project_id: str | None = None) -> dict:
+    return _project_payload(get_project(project_id))
+
+
+@app.get("/api/projects")
+def projects_list() -> dict:
+    items = [{"id": DEFAULT_PROJECT_ID, "name": PROJECTS[DEFAULT_PROJECT_ID].name, "synthetic": True}]
+    seen = {DEFAULT_PROJECT_ID}
+    for item in online.list_cached():
+        if item["id"] not in seen:
+            items.append({**item, "synthetic": False})
+            seen.add(item["id"])
+    return {"projects": items}
+
+
+# ---------------------------------------------------------------------------
+# Online territories
+# ---------------------------------------------------------------------------
+_JOBS: "OrderedDict[str, dict]" = OrderedDict()
+_JOBS_LOCK = threading.Lock()
+_JOB_LIMIT = 20
+_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="territory")  # one at a time: be polite to public services
+
+
+def _set_job(job_id: str, **fields) -> None:
+    with _JOBS_LOCK:
+        _JOBS[job_id].update(fields)
+
+
+def _run_job(job_id: str, request: online.TerritoryRequest, force: bool) -> None:
+    def progress(stage: str, fraction: float, message: str) -> None:
+        _set_job(job_id, status="running", stage=stage, fraction=round(fraction, 3), message=message)
+
+    try:
+        project = online.load_territory(request, progress=progress, force=force)
+        register_project(project)
+        _set_job(job_id, status="done", stage="done", fraction=1.0, message="Готово", project_id=project.id, finished=time.time())
+    except online.OnlineError as exc:
+        _set_job(job_id, status="error", error=str(exc), finished=time.time())
+    except Exception as exc:  # noqa: BLE001 - reported to the client, full trace goes to the log
+        log.exception("territory load failed")
+        _set_job(job_id, status="error", error=f"Внутренняя ошибка загрузки: {exc}", finished=time.time())
+
+
+@app.get("/api/territory/search")
+def territory_search(q: str = Query(..., min_length=2, max_length=200)) -> dict:
+    try:
+        places = online.geocode(q)
+    except online.OnlineError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return {"places": [p.as_dict() for p in places]}
+
+
+@app.post("/api/territory/plan")
+def territory_plan(request: TerritoryModel) -> dict:
+    try:
+        extent, place = online.resolve_request(request.to_request())
+    except online.OnlineError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return {"extent": extent.as_dict(), "place": place.as_dict() if place else None, "project_id": request.to_request().fingerprint(extent)}
+
+
+@app.post("/api/territory/load")
+def territory_load(request: TerritoryModel) -> dict:
+    with _JOBS_LOCK:
+        if any(job["status"] in ("queued", "running") for job in _JOBS.values()):
+            raise HTTPException(status_code=409, detail="Уже идёт загрузка другой территории — дождитесь её завершения.")
+        job_id = uuid.uuid4().hex[:12]
+        _JOBS[job_id] = {
+            "id": job_id,
+            "status": "queued",
+            "stage": "queued",
+            "fraction": 0.0,
+            "message": "В очереди…",
+            "error": None,
+            "project_id": None,
+            "started": time.time(),
+        }
+        while len(_JOBS) > _JOB_LIMIT:
+            _JOBS.popitem(last=False)
+    _EXECUTOR.submit(_run_job, job_id, request.to_request(), request.force)
+    return {"job_id": job_id}
+
+
+@app.get("/api/territory/jobs/{job_id}")
+def territory_job(job_id: str) -> dict:
+    with _JOBS_LOCK:
+        job = _JOBS.get(job_id)
+        if job is None:
+            raise HTTPException(status_code=404, detail="Unknown job")
+        return dict(job)
+
+
 @app.post("/api/analyze")
 def analyze(request: AnalyzeRequest) -> dict:
+    project = get_project(request.project_id)
     params = _params(request.params)
-    scenario = _scenario(request.scenario, request.params)
-    result = run(PROJECT, scenario, params)
-    base = run(PROJECT, SCENARIOS["base"], params) if scenario.id != "base" else None
-    return serialize(PROJECT, result, base)
+    scenario = _scenario(project, request.scenario, request.params)
+    result = run(project, scenario, params)
+    base = run(project, SCENARIOS[project.id]["base"], params) if scenario.id != "base" else None
+    return serialize(project, result, base)
 
 
 @app.post("/api/compare")
 def compare(request: CompareRequest) -> dict:
+    project = get_project(request.project_id)
     params = _params(request.params)
-    base = run(PROJECT, SCENARIOS["base"], params)
+    base = run(project, SCENARIOS[project.id]["base"], params)
     rows = []
     for scenario_id in request.scenarios:
-        scenario = _scenario(scenario_id, request.params)
-        result = run(PROJECT, scenario, params)
+        scenario = _scenario(project, scenario_id, request.params)
+        result = run(project, scenario, params)
         rows.append(
             {
                 "id": scenario.id,
@@ -174,17 +341,19 @@ def compare(request: CompareRequest) -> dict:
                         "mesh_ha",
                         "pc",
                         "iic",
+                        "eca_ha",
                         "patch_count",
                         "largest_patch_ha",
                         "lpi",
                         "edge_density_m_per_ha",
                         "largest_component_share",
                         "total_area_ha",
+                        "landscape_area_ha",
                     )
                 },
                 "network": result.network.stats,
                 "resistance_mean": round(float(result.resistance.mean()), 2),
-                "delta": serialize(PROJECT, result, base).get("delta", {}),
+                "delta": serialize(project, result, base).get("delta", {}),
             }
         )
     return {"base_token": base.token, "rows": rows}
@@ -203,13 +372,13 @@ def layer_png(token: str, layer: str) -> Response:
     cached = _LAYER_CACHE.get(key)
     if cached is None:
         if layer == "hillshade":
-            rgba = render.hillshade_rgba(PROJECT)
+            rgba = render.hillshade_rgba(result.project)
         elif layer == "landcover":
-            rgba = render.landcover_rgba(PROJECT, result.landcover)
+            rgba = render.landcover_rgba(result.project, result.landcover)
         elif layer == "resistance":
-            rgba = render.resistance_rgba(PROJECT, result.resistance)
+            rgba = render.resistance_rgba(result.project, result.resistance)
         elif layer == "cost":
-            rgba = render.cost_rgba(PROJECT, result.cost)
+            rgba = render.cost_rgba(result.project, result.cost)
         else:
             raise HTTPException(status_code=404, detail="Unknown layer")
         cached = render.png_bytes(rgba)
@@ -224,7 +393,7 @@ def build_route(request: RouteRequest) -> dict:
     result = get(request.token)
     if result is None:
         raise HTTPException(status_code=404, detail="Analysis expired, please re-run")
-    path = route(PROJECT, result, tuple(request.start), tuple(request.end))
+    path = route(result.project, result, tuple(request.start), tuple(request.end))
     if path is None:
         raise HTTPException(status_code=422, detail="No path between the selected points")
     return path
@@ -236,12 +405,13 @@ def sample(token: str, x: float, y: float) -> dict:
     result = get(token)
     if result is None:
         raise HTTPException(status_code=404, detail="Analysis expired")
-    col, row = ~PROJECT.transform * (x, y)
-    if not (0 <= row < PROJECT.height and 0 <= col < PROJECT.width):
+    project = result.project
+    col, row = ~project.transform * (x, y)
+    if not (0 <= row < project.height and 0 <= col < project.width):
         raise HTTPException(status_code=404, detail="Outside the raster")
     row, col = int(row), int(col)
     code = int(result.landcover[row, col])
-    name = next((c.name for c in PROJECT.classes if c.code == code), "—")
+    name = next((c.name for c in project.classes if c.code == code), "—")
     return {
         "resistance": round(float(result.resistance[row, col]), 2),
         "cost": round(float(result.cost[row, col]), 1) if np.isfinite(result.cost[row, col]) else None,
@@ -249,7 +419,7 @@ def sample(token: str, x: float, y: float) -> dict:
         "class_name": name,
         "x": round(x, 1),
         "y": round(y, 1),
-        "lonlat": list(PROJECT.to_lonlat(x, y)),
+        "lonlat": list(project.to_lonlat(x, y)),
     }
 
 
@@ -259,7 +429,7 @@ def export_corridors(token: str) -> Response:
     if result is None:
         raise HTTPException(status_code=404, detail="Analysis expired")
     features = _fc(result.network.lines, keep=None)
-    features["crs"] = {"type": "name", "properties": {"name": f"urn:ogc:def:crs:EPSG::{PROJECT.crs.split(':')[-1]}"}}
+    features["crs"] = {"type": "name", "properties": {"name": f"urn:ogc:def:crs:EPSG::{result.project.crs.split(':')[-1]}"}}
     body = json.dumps(features, ensure_ascii=False)
     return Response(body, media_type="application/geo+json", headers={"Content-Disposition": 'attachment; filename="corridors.geojson"'})
 
@@ -273,9 +443,12 @@ def export_metrics(token: str) -> Response:
         ("Сценарий", result.scenario.name),
         ("Площадь ООПТ, га", sum(result.cores.get("area_ha", []))),
         ("Патчей местообитаний", result.fragmentation.get("patch_count")),
+        ("Площадь ландшафта, га", result.fragmentation.get("landscape_area_ha")),
         ("Общая площадь местообитаний, га", result.fragmentation.get("total_area_ha")),
+        ("Доля местообитаний", result.fragmentation.get("habitat_share")),
         ("MESH, га", result.fragmentation.get("mesh_ha")),
         ("PC", result.fragmentation.get("pc")),
+        ("ECA (эквивалентная связная площадь), га", result.fragmentation.get("eca_ha")),
         ("IIC", result.fragmentation.get("iic")),
         ("Доля крупнейшего патча, %", result.fragmentation.get("lpi")),
         ("Плотность границ, м/га", result.fragmentation.get("edge_density_m_per_ha")),
@@ -305,7 +478,7 @@ def export_report(token: str) -> Response:
         raise HTTPException(status_code=404, detail="Analysis expired")
     from .report import build_report
 
-    html = build_report(PROJECT, result)
+    html = build_report(result.project, result)
     return Response(
         html,
         media_type="text/html; charset=utf-8",

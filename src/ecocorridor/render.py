@@ -17,23 +17,20 @@ from scipy.ndimage import gaussian_filter
 from .dataset import Project
 from .resistance import ResistanceSurface
 
-# Low resistance (good habitat) -> high resistance (barrier).
-RESISTANCE_STOPS: list[tuple[float, tuple[int, int, int]]] = [
-    (0.00, (15, 61, 51)),
-    (0.20, (43, 110, 82)),
-    (0.40, (127, 160, 94)),
-    (0.58, (216, 193, 115)),
-    (0.76, (224, 138, 74)),
-    (0.90, (201, 80, 63)),
-    (1.00, (142, 47, 62)),
+RESISTANCE_STOPS: list[tuple[float, tuple[int, int, int]]] = [  # ColorBrewer YlOrRd (sequential)
+    (0.00, (255, 255, 204)),
+    (0.25, (254, 217, 118)),
+    (0.50, (253, 141, 60)),
+    (0.75, (227, 26, 28)),
+    (1.00, (128, 0, 38)),
 ]
 
-COST_STOPS: list[tuple[float, tuple[int, int, int]]] = [
-    (0.00, (110, 236, 190)),
-    (0.25, (74, 170, 194)),
-    (0.50, (86, 108, 190)),
-    (0.75, (128, 74, 158)),
-    (1.00, (46, 30, 70)),
+COST_STOPS: list[tuple[float, tuple[int, int, int]]] = [  # ColorBrewer Blues: accessible (dark) -> remote (pale)
+    (0.00, (8, 48, 107)),
+    (0.25, (33, 113, 181)),
+    (0.50, (107, 174, 214)),
+    (0.75, (198, 219, 239)),
+    (1.00, (247, 251, 255)),
 ]
 
 
