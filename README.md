@@ -3,6 +3,7 @@
 [![tests](https://github.com/DmitryLeLeE/eco_corridor/actions/workflows/ci.yml/badge.svg)](https://github.com/DmitryLeLeE/eco_corridor/actions/workflows/ci.yml)
 [![лицензия MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.24132852.svg)](https://doi.org/10.5281/zenodo.24132852)
 [![документация](https://img.shields.io/badge/docs-GitHub%20Pages-0a3d91.svg)](https://dmitrylelee.github.io/eco_corridor/)
 
 Веб-приложение для анализа связности природных территорий: поверхность сопротивления, пути наименьшей стоимости, сеть экологических коридоров, индексы фрагментации (MESH, PC, IIC, ECA, dPC) и сравнение сценариев (урбанизация, новая дорога, восстановление пойм). Работает на демонстрационном синтетическом полигоне, на **любой территории, загружаемой онлайн**, и на **ваших собственных данных** (ZIP с растром землепокрова и слоями).

@@ -7,6 +7,7 @@
   "author": [{"@type": "Person", "givenName": "Dmitry", "familyName": "Papilin"}],
   "dateCreated": "2026",
   "runtimePlatform": "Python >=3.10",
+  "identifier": "https://doi.org/10.5281/zenodo.24132852",
   "codeRepository": "https://github.com/DmitryLeLeE/eco_corridor",
   "programmingLanguage": "Python",
   "description": "ГИС-модель экологических коридоров и связности ландшафта",
