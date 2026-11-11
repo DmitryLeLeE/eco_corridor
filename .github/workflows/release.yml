@@ -86,6 +86,7 @@ jobs:
       - name: Проверка образа
         run: |
           docker run -d --name eco -p 8000:8000 ecocorridor:ci
+          trap 'echo ---- logs ----; docker logs eco; docker ps -a' EXIT
           for i in $(seq 1 40); do curl -sf http://127.0.0.1:8000/api/health && break; sleep 2; done
           curl -sf http://127.0.0.1:8000/api/health
           curl -sf -X POST -H 'Content-Type: application/json' -d '{"scenario":"base"}' http://127.0.0.1:8000/api/analyze \
