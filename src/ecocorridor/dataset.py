@@ -15,9 +15,23 @@ from pyproj import Transformer
 from rasterio.features import rasterize
 from rasterio.transform import Affine
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-DEMO_DIR = REPO_ROOT / "data" / "demo"
-CACHE_DIR = Path(os.environ.get("ECOCORRIDOR_CACHE", REPO_ROOT / "data" / "cache"))
+PACKAGE_DIR = Path(__file__).resolve().parent
+DEMO_DIR = PACKAGE_DIR / "demo_data"
+
+
+def _default_cache_dir() -> Path:
+    """Cache location: $ECOCORRIDOR_CACHE, else ``data/cache`` in a source checkout,
+    else ``~/.cache/ecocorridor`` for an installed package."""
+    env = os.environ.get("ECOCORRIDOR_CACHE")
+    if env:
+        return Path(env)
+    checkout = PACKAGE_DIR.parents[1]
+    if (checkout / "pyproject.toml").exists():
+        return checkout / "data" / "cache"
+    return Path.home() / ".cache" / "ecocorridor"
+
+
+CACHE_DIR = _default_cache_dir()
 
 
 @dataclass(frozen=True)

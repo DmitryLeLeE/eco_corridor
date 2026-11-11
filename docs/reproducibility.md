@@ -4,7 +4,7 @@
 
 ## 1. Окружение
 
-* Python ≥ 3.10; зависимости — в `requirements.txt` (расчёт) и `requirements-dev.txt` (тесты и сборка сайта).
+* Python ≥ 3.10; зависимости описаны в `pyproject.toml` (расчёт — основной список, тесты и сборка сайта — extra `dev`).
 * Версии библиотек, использованные при сборке сайта, записываются в `provenance.json` рядом с демо (numpy, scipy, rasterio, и т. д.), там же — хеш коммита.
 * Для точной фиксации окружения сохраните `pip freeze > environment.lock.txt` вместе с результатами.
 
@@ -26,7 +26,7 @@
 ```bash
 git clone https://github.com/DmitryLeLeE/eco_corridor && cd eco_corridor
 python -m venv .venv && . .venv/bin/activate
-pip install -r requirements-dev.txt
+pip install -e ".[dev]"
 python -m pytest -q                       # 45 тестов
 python scripts/make_demo_data.py          # демо-полигон
 python scripts/sensitivity.py --json out.json   # анализ чувствительности
@@ -46,4 +46,4 @@ uvicorn ecocorridor.api:app               # приложение
 
 * Данные OSM не версионируются в программе: повторная загрузка спустя месяцы даст другой результат. Решение — хранить кэш.
 * Ссылки на облачные тайлы могут измениться; источники и шаблоны вынесены в настройки.
-* Контейнер или Docker-образ пока не предоставляются.
+* Для изолированного запуска есть `Dockerfile` (образ не публикуется; собирается локально).

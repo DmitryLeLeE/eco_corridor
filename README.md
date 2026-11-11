@@ -7,15 +7,20 @@
 ## Быстрый старт
 
 ```bash
-pip install -r requirements.txt        # для тестов: requirements-dev.txt
-python -m uvicorn ecocorridor.api:app --app-dir src --port 8000
+git clone https://github.com/DmitryLeLeE/eco_corridor && cd eco_corridor
+pip install -e .                       # для тестов: pip install -e ".[dev]"
+ecocorridor                            # или: python -m ecocorridor --port 8000
 # откройте http://127.0.0.1:8000
 python -m pytest -q                    # 45 тестов
 ```
 
+Docker: `docker build -t ecocorridor . && docker run -p 8000:8000 -v ecocorridor-data:/data ecocorridor`.
+
+Документация: <https://dmitrylelee.github.io/eco_corridor/> · Лицензия кода: MIT · Как цитировать: `CITATION.cff` · [CHANGELOG](CHANGELOG.md) · [Как внести вклад](CONTRIBUTING.md).
+
 ## Загрузка любой территории
 
-Кнопка **«Территория»**: название (поиск Nominatim) или координаты центра → сторона кадра и разрешение → «Загрузить и рассчитать». Сервер скачивает данные один раз и кэширует их в `data/cache/` (переменная `ECOCORRIDOR_CACHE`).
+Кнопка **«Территория»**: название (поиск Nominatim) или координаты центра → сторона кадра и разрешение → «Загрузить и рассчитать». Сервер скачивает данные один раз и кэширует их в `data/cache/` клона репозитория или в `~/.cache/ecocorridor` при установке пакета (переменная `ECOCORRIDOR_CACHE`).
 
 | Данные | Источник |
 |---|---|
@@ -79,11 +84,12 @@ src/ecocorridor/
   analysis.py      оркестрация и кэш результатов
   api.py           FastAPI
   static/          интерфейс (Canvas, без картографических библиотек)
-scripts/           make_demo_data.py, sensitivity.py
+  demo_data/       синтетический демо-полигон «Синий Бор»
+scripts/           make_demo_data.py, sensitivity.py, build_pages.py
 tests/             аналитические тесты и тесты загрузчика
-docs/              METHODOLOGY_REVIEW.md
+docs/              справка, методика, валидация, аудит (сайт Pages)
 ```
 
 ## Лицензии данных
 
-© участники OpenStreetMap (ODbL); ESA WorldCover — CC BY 4.0 (Zanaga et al. 2022); Copernicus DEM — © ESA / Copernicus. Лицензия самого кода не указана — выберите и добавьте файл `LICENSE`.
+© участники OpenStreetMap (ODbL); ESA WorldCover — CC BY 4.0 (Zanaga et al. 2022); Copernicus DEM — © ESA / Copernicus. Код распространяется под лицензией MIT (файл `LICENSE`).

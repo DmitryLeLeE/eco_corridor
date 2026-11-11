@@ -10,8 +10,8 @@
 git clone https://github.com/DmitryLeLeE/eco_corridor
 cd eco_corridor
 python -m venv .venv && source .venv/bin/activate      # Windows: .venv\Scripts\activate
-pip install -r requirements.txt                          # для тестов: requirements-dev.txt
-python -m uvicorn ecocorridor.api:app --app-dir src --port 8000
+pip install -e .                                          # для тестов: pip install -e ".[dev]"
+ecocorridor --port 8000
 ```
 
 Откройте <http://127.0.0.1:8000>. Демонстрационный полигон «Синий Бор» (синтетический, 60 × 45 км, ячейка 100 м) доступен сразу. Rasterio и GeoPandas на Windows проще ставить из готовых колёс (`pip install` их подтягивает) или через conda-forge.

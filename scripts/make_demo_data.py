@@ -25,7 +25,7 @@ from scipy.ndimage import binary_dilation, binary_erosion, distance_transform_ed
 from shapely.geometry import LineString, Point, box, mapping, shape
 
 HERE = Path(__file__).resolve().parent
-OUT = HERE.parent / "data" / "demo"
+OUT = HERE.parent / "src" / "ecocorridor" / "demo_data"
 OUT.mkdir(parents=True, exist_ok=True)
 
 # ----------------------------------------------------------------------------

@@ -1,0 +1,29 @@
+name: release
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e ".[dev]"
+      - run: python -m pytest -q
+      - name: Проверка версии тега
+        run: |
+          v=$(python -c "import ecocorridor; print(ecocorridor.__version__)")
+          test "v$v" = "${GITHUB_REF_NAME}" || { echo "Тег ${GITHUB_REF_NAME} не совпадает с версией $v"; exit 1; }
+      - run: python -m build
+      - name: Заметки из CHANGELOG
+        run: |
+          v="${GITHUB_REF_NAME#v}"
+          awk -v v="$v" '$0 ~ "^## "v"$" {f=1; next} /^## /{f=0} f' CHANGELOG.md > notes.md
+      - uses: softprops/action-gh-release@v2
+        with:
+          body_path: notes.md
+          files: dist/*

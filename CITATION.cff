@@ -4,6 +4,9 @@ title: "eco_corridor: ГИС-модель экологических корид�
 version: 0.2.0
 type: software
 authors:
-  - alias: "DmitryLeLeE"
+  - family-names: "Papilin"
+    given-names: "Dmitry"
+license: MIT
 repository-code: "https://github.com/DmitryLeLeE/eco_corridor"
 keywords: [landscape connectivity, least-cost path, ecological corridors, GIS]
+date-released: 2026-11-11

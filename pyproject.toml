@@ -1,0 +1,58 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ecocorridor"
+dynamic = ["version"]
+description = "Ecological corridors and landscape connectivity: resistance surfaces, least-cost paths, MESH/PC/IIC/ECA/dPC, scenarios, online territory loading"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Dmitry Papilin" }]
+keywords = ["landscape connectivity", "least-cost path", "ecological corridors", "GIS", "fragmentation"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: GIS",
+]
+dependencies = [
+    "numpy>=1.26",
+    "pandas>=2.0",
+    "geopandas>=1.0",
+    "rasterio>=1.3",
+    "shapely>=2.0",
+    "pyproj>=3.5",
+    "scipy>=1.10",
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+    "pydantic>=2.6",
+    "networkx>=3.0",
+    "pillow>=10.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "httpx>=0.27", "markdown", "build"]
+
+[project.urls]
+Homepage = "https://github.com/DmitryLeLeE/eco_corridor"
+Documentation = "https://dmitrylelee.github.io/eco_corridor/"
+Changelog = "https://github.com/DmitryLeLeE/eco_corridor/blob/main/CHANGELOG.md"
+
+[project.scripts]
+ecocorridor = "ecocorridor.__main__:main"
+
+[tool.setuptools.dynamic]
+version = { attr = "ecocorridor.__version__" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+ecocorridor = ["static/**/*", "demo_data/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
