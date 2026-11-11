@@ -24,6 +24,13 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--version", action="version", version=f"ecocorridor {__version__}")
     args = parser.parse_args(argv)
 
+    # A console or redirected stream may use a legacy code page (cp1252, cp866): never fail on Cyrillic.
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(errors="replace")
+        except (AttributeError, ValueError):
+            pass
+
     # The packaged Windows application (PyInstaller) opens the browser by default; the pip command does not.
     open_browser = getattr(sys, "frozen", False) if args.open_browser is None else args.open_browser
 
