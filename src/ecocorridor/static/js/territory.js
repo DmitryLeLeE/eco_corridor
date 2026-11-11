@@ -137,6 +137,46 @@ const Territory = (() => {
     }
   }
 
+  /* ------------------------------------------------------------- own data */
+  async function upload() {
+    const file = $("u-file").files[0];
+    if (!file || st.loading) {
+      if (!file) {
+        setProgress(true, 0, "");
+        $("t-progress-text").innerHTML = `<span style="color:var(--red)">Выберите ZIP-архив с данными.</span>`;
+      }
+      return;
+    }
+    const query = { scheme: $("u-scheme").value, min_core_ha: String(Number($("u-mincore").value) || 100) };
+    if ($("u-name").value.trim()) query.name = $("u-name").value.trim();
+    if ($("u-res").value) query.resolution_m = String(Number($("u-res").value));
+    st.loading = true;
+    $("u-load").disabled = true;
+    setProgress(true, 0.02, `Отправляю ${(file.size / 1e6).toFixed(1)} МБ…`);
+    try {
+      const { job_id } = await API.importData(file, query);
+      for (;;) {
+        await new Promise((r) => setTimeout(r, 600));
+        const job = await API.job(job_id);
+        if (job.status === "error") throw new Error(job.error || "ошибка импорта");
+        setProgress(true, job.fraction || 0, job.message || "");
+        if (job.status === "done") {
+          App.closeModals();
+          App.toast("Данные загружены");
+          await App.openProject(job.project_id);
+          break;
+        }
+      }
+    } catch (error) {
+      setProgress(true, 0, "");
+      $("t-progress-text").innerHTML = `<span style="color:var(--red)">${esc(error.message)}</span>`;
+    } finally {
+      st.loading = false;
+      $("u-load").disabled = false;
+      refreshCached();
+    }
+  }
+
   /* ------------------------------------------------------------- cached */
   async function refreshCached() {
     const box = $("t-cached");
@@ -174,6 +214,7 @@ const Territory = (() => {
       });
     });
     $("t-load").addEventListener("click", load);
+    $("u-load").addEventListener("click", upload);
   }
 
   document.addEventListener("DOMContentLoaded", bind);

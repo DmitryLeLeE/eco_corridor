@@ -61,7 +61,7 @@ const App = (() => {
   function describeProject(project) {
     const w = (project.bounds[2] - project.bounds[0]) / 1000;
     const h = (project.bounds[3] - project.bounds[1]) / 1000;
-    const kind = project.synthetic ? " · синтетический" : project.online ? " · онлайн-данные" : "";
+    const kind = project.synthetic ? " · синтетический" : project.online ? " · онлайн-данные" : project.imported ? " · свои данные" : "";
     return `${fmt(w)} × ${fmt(h)} км · ${project.resolution_m} м · ${project.crs}${kind}`;
   }
 
@@ -69,7 +69,7 @@ const App = (() => {
     const panel = $("sources-panel");
     const warnings = project.warnings || [];
     const sources = project.sources || [];
-    panel.hidden = !(project.online && (warnings.length || sources.length));
+    panel.hidden = !((project.online || project.imported) && (warnings.length || sources.length));
     $("sources-warnings").innerHTML = warnings.map((w) => `<div class="sources-warn">${escapeHtml(w)}</div>`).join("");
     $("sources-list").innerHTML = sources.map((s) => `<li>${escapeHtml(s)}</li>`).join("");
     $("sources-tag").textContent = project.core_source ? "ядра: " + (project.core_source.startsWith("OpenStreetMap") ? "ООПТ" : "леса") : "";
@@ -89,6 +89,7 @@ const App = (() => {
       const project = await API.project(id);
       API.setProject(project.id);
       state.project = project;
+      renderClassEditor(project); // before readParams: a new project starts from its own class table
       state.result = null;
       state.compareRows = null;
       state.scenario = "base";
@@ -207,8 +208,48 @@ const App = (() => {
     });
   }
 
+  /* ---- per-class resistance editor (species-specific values) ---- */
+  function renderClassEditor(project) {
+    $("class-grid").innerHTML = project.classes
+      .map(
+        (c) => `<label class="class-row"><i style="background:${c.color}"></i><span>${escapeHtml(c.name)}</span>
+          <input type="number" class="input" min="1" max="5000" step="1" data-code="${c.code}" data-default="${c.resistance}" value="${c.resistance}"></label>`
+      )
+      .join("");
+    $("class-grid").querySelectorAll("input").forEach((input) =>
+      input.addEventListener("input", () => {
+        markEdited(input);
+        scheduleRun();
+      })
+    );
+    updateClassCount();
+  }
+
+  function markEdited(input) {
+    const value = Number(input.value);
+    input.classList.toggle("edited", Number.isFinite(value) && value !== Number(input.dataset.default));
+    input.classList.toggle("invalid", !(value >= 1 && value <= 5000));
+    updateClassCount();
+  }
+
+  function classOverrides() {
+    const out = {};
+    document.querySelectorAll("#class-grid input").forEach((input) => {
+      const value = Number(input.value);
+      if (value >= 1 && value <= 5000 && value !== Number(input.dataset.default)) out[input.dataset.code] = value;
+    });
+    return out;
+  }
+
+  function updateClassCount() {
+    const n = Object.keys(classOverrides()).length;
+    $("class-edit-count").textContent = n ? `изменено: ${n}` : "";
+  }
+
   function readParams() {
+    const overrides = classOverrides();
     return {
+      ...(Object.keys(overrides).length ? { class_resistance: overrides } : {}),
       mode: $("mode").value,
       slope_weight: Number($("w-slope").value),
       road_weight: Number($("w-road").value),
@@ -238,6 +279,13 @@ const App = (() => {
     $("habitat").addEventListener("change", scheduleRun);
     $("neighbours").addEventListener("change", scheduleRun);
     $("btn-run").addEventListener("click", () => runAnalysis(state.scenario));
+    $("class-reset").addEventListener("click", () => {
+      document.querySelectorAll("#class-grid input").forEach((input) => {
+        input.value = input.dataset.default;
+        markEdited(input);
+      });
+      scheduleRun();
+    });
 
     document.querySelectorAll("[data-reset]").forEach((button) => {
       button.addEventListener("click", () => {
@@ -286,6 +334,17 @@ const App = (() => {
     $("route-close").addEventListener("click", () => clearRoute());
 
     $("btn-compare").addEventListener("click", openCompare);
+    $("btn-raster").addEventListener("change", (event) => {
+      const layer = event.target.value;
+      event.target.value = "";
+      if (!layer || !state.token) return;
+      const link = document.createElement("a");
+      link.href = API.rasterUrl(state.token, layer);
+      link.download = `ecocorridor-${layer}-${state.scenario}.tif`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    });
     $("btn-method").addEventListener("click", () => openModal("method-modal"));
     $("btn-territory").addEventListener("click", () => { openModal("territory-modal"); window.Territory?.opened(); });
     document.querySelectorAll("[data-close]").forEach((button) => button.addEventListener("click", closeModals));
@@ -392,6 +451,9 @@ const App = (() => {
   function updateExportLinks(token) {
     $("btn-report").href = API.reportUrl(token);
     $("btn-geojson").href = API.geojsonUrl(token);
+    $("btn-gpkg").href = API.gpkgUrl(token);
+    $("btn-gpkg").setAttribute("download", `ecocorridor-${state.scenario}.gpkg`);
+    state.token = token;
     $("btn-report").setAttribute("download", `ecocorridor-report-${state.scenario}.html`);
     $("btn-geojson").setAttribute("download", `ecocorridor-corridors-${state.scenario}.geojson`);
   }

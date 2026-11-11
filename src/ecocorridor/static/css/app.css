@@ -697,3 +697,19 @@ input[type="range"]::-moz-range-thumb { background: #ffffff; border: 2px solid v
 .t-plan .warn, .sources-warn { color: var(--amber); }
 .sources-warn { background: #fff7e8; border-color: #e6c98f; }
 .t-progress-text .err { color: var(--red) !important; }
+
+.link-select {
+  background: none; border: 0; padding: 0; color: var(--muted); font-size: 11.5px; cursor: pointer;
+  font-family: inherit; max-width: 92px;
+}
+.link-select:hover { color: var(--accent); }
+.link-select option { color: #111; }
+
+.class-editor { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 8px; }
+.class-editor summary { cursor: pointer; font-size: 12px; color: var(--text-dim); }
+.class-grid { display: flex; flex-direction: column; gap: 4px; margin: 8px 0 6px; }
+.class-row { display: grid; grid-template-columns: 10px 1fr 68px; align-items: center; gap: 8px; font-size: 11.5px; color: var(--text-dim); }
+.class-row i { width: 10px; height: 10px; border-radius: 2px; display: block; }
+.class-row input { padding: 3px 6px; font-size: 11.5px; text-align: right; }
+.class-row input.edited { border-color: var(--accent); }
+.class-row input.invalid { border-color: var(--red); }

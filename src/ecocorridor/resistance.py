@@ -42,6 +42,8 @@ class ResistanceParams:
     urban_decay_m: float = 1200.0
     slope_ref_deg: float = 22.0
     max_resistance: float = 5000.0
+    # Per-class baseline resistance replacing the project's table (species-specific values), {class code: value}.
+    class_resistance: dict[int, float] = field(default_factory=dict)
 
     def as_dict(self) -> dict:
         return {
@@ -53,6 +55,7 @@ class ResistanceParams:
             "urban_decay_m": self.urban_decay_m,
             "slope_ref_deg": self.slope_ref_deg,
             "max_resistance": self.max_resistance,
+            "class_resistance": {str(k): float(v) for k, v in sorted(self.class_resistance.items())},
         }
 
 
@@ -98,7 +101,7 @@ def build_resistance(project: Project, params: ResistanceParams | None = None) -
 
     base_map = np.ones(project.shape, dtype=np.float64)
     for cls in project.classes:
-        base_map[project.landcover == cls.code] = cls.resistance
+        base_map[project.landcover == cls.code] = params.class_resistance.get(cls.code, cls.resistance)
     # Unknown classes (0 / missing) are treated as moderately permeable.
     base_map[project.landcover == 0] = 20.0
 
@@ -153,7 +156,7 @@ def build_resistance(project: Project, params: ResistanceParams | None = None) -
                 "code": cls.code,
                 "name": cls.name,
                 "color": cls.color,
-                "base_resistance": cls.resistance,
+                "base_resistance": params.class_resistance.get(cls.code, cls.resistance),
                 "mean_resistance": round(float(values[mask].mean()), 2),
                 "share": round(float(mask.mean()), 4),
                 "area_ha": round(float(mask.sum() * res * res / 10_000), 1),

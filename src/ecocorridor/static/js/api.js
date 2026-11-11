@@ -32,11 +32,14 @@ const API = (() => {
     searchPlace: (q) => request(`/api/territory/search?q=${encodeURIComponent(q)}`),
     planTerritory: (body) => post("/api/territory/plan", body),
     loadTerritory: (body) => post("/api/territory/load", body),
+    importData: (file, query) => request(`/api/import?${new URLSearchParams(query)}`, { method: "POST", body: file, headers: { "Content-Type": "application/zip" } }),
     job: (id) => request(`/api/territory/jobs/${encodeURIComponent(id)}`),
     route: (token, start, end) => request("/api/route", { method: "POST", body: JSON.stringify({ token, start, end }) }),
     sample: (token, x, y) => request(`/api/sample/${token}?x=${x.toFixed(1)}&y=${y.toFixed(1)}`),
     reportUrl: (token) => `/api/export/${token}/report.html`,
     geojsonUrl: (token) => `/api/export/${token}/corridors.geojson`,
+    gpkgUrl: (token) => `/api/export/${token}/result.gpkg`,
+    rasterUrl: (token, layer) => `/api/export/${token}/${layer}.tif`,
     csvUrl: (token) => `/api/export/${token}/metrics.csv`,
   };
 })();

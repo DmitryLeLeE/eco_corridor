@@ -89,6 +89,13 @@
             <option value="weighted_sum">Взвешенная сумма</option>
           </select>
         </div>
+        <details class="class-editor" id="class-editor">
+          <summary>Сопротивление классов <span class="field-hint" id="class-edit-count"></span></summary>
+          <p class="hint">Относительная стоимость пересечения ячейки класса (1 — свободное движение). Подберите под вид:
+            значения по умолчанию — экспертные и не откалиброваны.</p>
+          <div class="class-grid" id="class-grid"></div>
+          <button class="link-btn" type="button" id="class-reset">вернуть значения проекта</button>
+        </details>
       </section>
 
       <section class="panel">
@@ -239,6 +246,14 @@
           <span id="status-res">100 м</span>
           <a class="link-btn" id="btn-report" href="#" download>Отчёт ↓</a>
           <a class="link-btn" id="btn-geojson" href="#" download>GeoJSON ↓</a>
+          <a class="link-btn" id="btn-gpkg" href="#" download title="Ядра, коридоры, зоны, узкие места и слои контекста">GPKG ↓</a>
+          <select class="link-select" id="btn-raster" title="Скачать растр в системе координат проекта (GeoTIFF)">
+            <option value="">GeoTIFF ↓</option>
+            <option value="resistance">сопротивление</option>
+            <option value="cost">накопленная стоимость</option>
+            <option value="flow">поток по коридорам</option>
+            <option value="landcover">землепокров сценария</option>
+          </select>
         </div>
       </div>
     </section>
@@ -394,14 +409,46 @@
           </label>
         </div>
         <div class="t-plan" id="t-plan"></div>
-        <div class="t-progress" id="t-progress" hidden>
-          <div class="t-bar"><span id="t-bar-fill"></span></div>
-          <div class="t-progress-text" id="t-progress-text">—</div>
-        </div>
         <div class="t-actions">
           <button class="btn primary" id="t-load">Загрузить и рассчитать</button>
           <label class="t-force"><input type="checkbox" id="t-force"> игнорировать кэш</label>
         </div>
+      </div>
+
+      <details class="t-manual" id="u-box">
+        <summary>или загрузить свои данные (ZIP)</summary>
+        <p class="hint">Архив с <code>landcover.tif</code> (обязательно) и, по желанию, <code>dem.tif</code>,
+          <code>protected_areas.geojson</code> (ядра), <code>roads</code>, <code>rivers</code>, <code>settlements</code>
+          (GeoJSON / GPKG / Shapefile) и <code>classes.json</code>. Файлы узнаются по имени; система координат любая.</p>
+        <div class="t-grid">
+          <label>Архив
+            <input type="file" class="input" id="u-file" accept=".zip,application/zip">
+          </label>
+          <label>Коды землепокрова
+            <select class="select" id="u-scheme">
+              <option value="ecocorridor">классы EcoCorridor (1…10)</option>
+              <option value="worldcover">ESA WorldCover (10, 20 … 100)</option>
+              <option value="custom">свои: «map» в classes.json</option>
+            </select>
+          </label>
+          <label>Название
+            <input type="text" class="input" id="u-name" maxlength="120" placeholder="необязательно">
+          </label>
+          <label>Разрешение, м
+            <input type="number" class="input" id="u-res" min="1" max="5000" step="1" placeholder="как у растра">
+          </label>
+          <label>Мин. площадь ядра, га
+            <input type="number" class="input" id="u-mincore" min="1" max="100000" step="10" value="100">
+          </label>
+        </div>
+        <div class="t-actions">
+          <button class="btn primary" id="u-load" type="button">Загрузить и рассчитать</button>
+        </div>
+      </details>
+
+      <div class="t-progress" id="t-progress" hidden>
+        <div class="t-bar"><span id="t-bar-fill"></span></div>
+        <div class="t-progress-text" id="t-progress-text">—</div>
       </div>
 
       <h3 class="t-sub">Уже загружено</h3>

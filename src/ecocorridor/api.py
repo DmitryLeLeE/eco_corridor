@@ -16,12 +16,12 @@ from pathlib import Path
 from typing import Literal
 
 import numpy as np
-from fastapi import FastAPI, HTTPException, Query, Response
+from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
-from . import __version__, online, render
+from . import __version__, exports, importer, online, render
 from .analysis import ModelParams, forget_project, get, route, run, serialize
 from .corridors import CorridorParams
 from .dataset import CACHE_DIR, Project, load_demo
@@ -83,6 +83,21 @@ class ParamsModel(BaseModel):
     habitat: Literal["natural", "forest", "forest_wetland"] = "natural"
     urban_growth_m: float | None = Field(None, ge=0.0, le=5000.0)
     restoration: float | None = Field(None, ge=0.0, le=0.9)
+    class_resistance: dict[int, float] | None = Field(
+        None, description="Baseline resistance per land-cover class code (1…10), replaces the project's table"
+    )
+
+    @field_validator("class_resistance")
+    @classmethod
+    def _check_class_resistance(cls, value):
+        if value is None:
+            return value
+        for code, resistance in value.items():
+            if not 1 <= code <= 10:
+                raise ValueError(f"Код класса должен быть 1…10, получено {code}")
+            if not 1.0 <= resistance <= 5000.0:
+                raise ValueError(f"Сопротивление класса {code} должно быть от 1 до 5000")
+        return value
 
 
 class AnalyzeRequest(BaseModel):
@@ -151,6 +166,7 @@ def _params(params: ParamsModel) -> ModelParams:
             road_decay_m=params.road_decay_m,
             urban_decay_m=params.urban_decay_m,
             slope_ref_deg=params.slope_ref_deg,
+            class_resistance=dict(params.class_resistance or {}),
         ),
         fragmentation=FragmentationParams(
             dispersal_m=params.dispersal_m,
@@ -197,6 +213,7 @@ def _project_payload(project: Project) -> dict:
         "extent_lonlat": project.extent_lonlat(),
         "synthetic": project.synthetic,
         "online": bool(meta.get("online")),
+        "imported": bool(meta.get("imported")),
         "sources": meta.get("sources", []),
         "warnings": meta.get("warnings", []),
         "core_source": meta.get("core_source"),
@@ -306,6 +323,50 @@ def territory_job(job_id: str) -> dict:
         if job is None:
             raise HTTPException(status_code=404, detail="Unknown job")
         return dict(job)
+
+
+@app.post("/api/import")
+async def import_data(
+    request: Request,
+    name: str | None = Query(None, max_length=120),
+    scheme: Literal["ecocorridor", "worldcover", "custom"] = "ecocorridor",
+    resolution_m: float | None = Query(None, ge=1.0, le=5000.0),
+    min_core_ha: float = Query(100.0, ge=1.0, le=100_000.0),
+) -> dict:
+    """Own data: the request body is a ZIP archive (land cover raster + optional DEM and vector layers)."""
+    declared = request.headers.get("content-length")
+    if declared and declared.isdigit() and int(declared) > importer.MAX_ZIP_BYTES:
+        raise HTTPException(status_code=413, detail="Архив больше 400 МБ.")
+    payload = await request.body()
+    if not payload:
+        raise HTTPException(status_code=422, detail="Пустой запрос: приложите ZIP-архив с данными.")
+    with _JOBS_LOCK:
+        if any(job["status"] in ("queued", "running") for job in _JOBS.values()):
+            raise HTTPException(status_code=409, detail="Уже идёт загрузка — дождитесь её завершения.")
+        job_id = uuid.uuid4().hex[:12]
+        _JOBS[job_id] = {
+            "id": job_id, "status": "queued", "stage": "queued", "fraction": 0.0, "message": "В очереди…",
+            "error": None, "project_id": None, "started": time.time(),
+        }
+        while len(_JOBS) > _JOB_LIMIT:
+            _JOBS.popitem(last=False)
+
+    def work() -> None:
+        def progress(stage: str, fraction: float, message: str) -> None:
+            _set_job(job_id, status="running", stage=stage, fraction=round(fraction, 3), message=message)
+
+        try:
+            project = importer.import_zip(payload, name, scheme, resolution_m, min_core_ha, progress)
+            register_project(project)
+            _set_job(job_id, status="done", stage="done", fraction=1.0, message="Готово", project_id=project.id, finished=time.time())
+        except online.OnlineError as exc:
+            _set_job(job_id, status="error", error=str(exc), finished=time.time())
+        except Exception as exc:  # noqa: BLE001
+            log.exception("import failed")
+            _set_job(job_id, status="error", error=f"Внутренняя ошибка импорта: {exc}", finished=time.time())
+
+    _EXECUTOR.submit(work)
+    return {"job_id": job_id}
 
 
 @app.post("/api/analyze")
@@ -483,4 +544,30 @@ def export_report(token: str) -> Response:
         html,
         media_type="text/html; charset=utf-8",
         headers={"Content-Disposition": 'attachment; filename="ecocorridor_report.html"'},
+    )
+
+
+@app.get("/api/export/{token}/{layer}.tif")
+def export_raster(token: str, layer: str) -> Response:
+    result = get(token)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Analysis expired")
+    if layer not in exports.RASTER_LAYERS:
+        raise HTTPException(status_code=404, detail=f"Unknown raster: {layer}")
+    return Response(
+        exports.raster_bytes(result, layer),
+        media_type="image/tiff",
+        headers={"Content-Disposition": f'attachment; filename="ecocorridor_{layer}.tif"'},
+    )
+
+
+@app.get("/api/export/{token}/result.gpkg")
+def export_geopackage(token: str) -> Response:
+    result = get(token)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Analysis expired")
+    return Response(
+        exports.geopackage_bytes(result),
+        media_type="application/geopackage+sqlite3",
+        headers={"Content-Disposition": 'attachment; filename="ecocorridor.gpkg"'},
     )
