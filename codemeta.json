@@ -1,0 +1,10 @@
+{
+  "@context": "https://doi.org/10.5063/schema/codemeta-2.0",
+  "@type": "SoftwareSourceCode",
+  "name": "eco_corridor",
+  "version": "0.2.0",
+  "codeRepository": "https://github.com/DmitryLeLeE/eco_corridor",
+  "programmingLanguage": "Python",
+  "description": "ГИС-модель экологических коридоров и связности ландшафта",
+  "keywords": ["landscape connectivity", "least-cost path", "ecological corridors"]
+}

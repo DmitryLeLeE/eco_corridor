@@ -1,0 +1,9 @@
+cff-version: 1.2.0
+message: "Если вы используете это ПО, пожалуйста, цитируйте его."
+title: "eco_corridor: ГИС-модель экологических коридоров и связности ландшафта"
+version: 0.2.0
+type: software
+authors:
+  - alias: "DmitryLeLeE"
+repository-code: "https://github.com/DmitryLeLeE/eco_corridor"
+keywords: [landscape connectivity, least-cost path, ecological corridors, GIS]

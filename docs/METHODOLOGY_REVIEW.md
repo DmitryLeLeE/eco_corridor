@@ -62,6 +62,7 @@
 * McRae B. et al. 2008. Using circuit theory to model connectivity in ecology, evolution, and conservation. *Ecology* 89.
 * Pascual-Hortal L., Saura S. 2006. Comparison and development of new graph-based landscape connectivity indices. *Landscape Ecology* 21.
 * Saura S., Pascual-Hortal L. 2007. A new habitat availability index to integrate connectivity in landscape conservation planning. *Landscape and Urban Planning* 83.
+* Saura S., Estreguil C., Mouton C., Rodríguez-Freire M. 2011. Network analysis to assess landscape connectivity trends: application to European forests (1990–2000). *Ecological Indicators* 11.
 * Saura S., Rubio L. 2010. A common currency for the different ways in which patches and links can contribute to habitat availability and connectivity. *Ecography* 33.
 * Zeller K., McGarigal K., Whiteley A. 2012. Estimating landscape resistance to movement: a review. *Landscape Ecology* 27.
 * Zanaga D. et al. 2022. ESA WorldCover 10 m 2021 v200 (Zenodo). Данные Copernicus DEM — ESA / Airbus; © участники OpenStreetMap (ODbL).

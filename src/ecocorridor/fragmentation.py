@@ -38,7 +38,7 @@ crossed at no cost), so stepping stones genuinely raise ``p*`` above the direct
 probability.  ``ECA = A_L * sqrt(PC)`` (equivalent connected area, Saura et al.
 2011) expresses PC in hectares.
 
-dPC (Saura & Rubio 2010) of a patch is the relative loss of PC when that patch
+dPC (Pascual-Hortal & Saura 2006; Saura & Pascual-Hortal 2007) of a patch is the relative loss of PC when that patch
 is removed from the network, recomputed from scratch (stepping-stone effects
 included).
 
