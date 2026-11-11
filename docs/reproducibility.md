@@ -31,6 +31,9 @@ python -m pytest -q                       # 51 тест
 python scripts/make_demo_data.py          # демо-полигон
 python scripts/sensitivity.py --json out.json   # анализ чувствительности
 python scripts/smoke_online.py            # проверка загрузки на реальных сервисах (нужен интернет)
+python scripts/rref_sweep.py              # чувствительность PC по стоимости к опорному сопротивлению
+python scripts/conefor_check.py toy out/toy   # файлы для сверки с Conefor (раздел «Валидация», 6)
+python scripts/calibrate.py rsf points.csv --demo   # калибровка сопротивлений по точкам (или ssf по трекам)
 python scripts/build_pages.py             # этот сайт
 uvicorn ecocorridor.api:app               # приложение
 ```

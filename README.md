@@ -71,7 +71,7 @@ API: `GET /api/territory/search?q=`, `POST /api/territory/plan`, `POST /api/terr
 * сопротивления классов экспертные и не откалиброваны; результат чувствителен к ним: при разбросе ×exp(N(0; 0,5)) положение коридоров совпало с базовым лишь на ~0,45 (IoU), остов — на 0,97 (`python scripts/sensitivity.py`);
 * точность WorldCover около 77 %, OSM неполон в малонаселённых районах.
 
-**Что не проверялось:** реальные скачивания с серверов ESA/Copernicus/OSM в среде разработки были закрыты — загрузчик проверен на синтетических тайлах и подложном Overpass; численного сравнения с Conefor/Graphab не было.
+**Что не проверялось:** реальные скачивания с серверов ESA/Copernicus/OSM в среде разработки были закрыты — загрузчик проверен на синтетических тайлах и подложном Overpass; численного сравнения с Conefor/Graphab не было (подготовлены `scripts/conefor_check.py` и независимая эталонная реализация `reference.py`; запуск Conefor — за пользователем).
 
 ## Структура
 
@@ -87,7 +87,7 @@ src/ecocorridor/
   api.py           FastAPI
   static/          интерфейс (Canvas, без картографических библиотек)
   demo_data/       синтетический демо-полигон «Синий Бор»
-scripts/           make_demo_data.py, sensitivity.py, build_pages.py
+scripts/           make_demo_data.py, sensitivity.py, rref_sweep.py, conefor_check.py, calibrate.py, smoke_online.py, build_pages.py
 tests/             аналитические тесты и тесты загрузчика
 docs/              справка, методика, валидация, аудит (сайт Pages)
 ```

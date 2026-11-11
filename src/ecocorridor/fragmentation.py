@@ -155,11 +155,21 @@ def _edge_distances(
             trees[a] = cKDTree(pts_a)
         dist, _ = trees[a].query(pts_b, k=1, distance_upper_bound=max_dist + 2.0 * res)
         best = float(dist.min())
-        if np.isfinite(best):
-            # Boundary-cell centres are one cell apart across a one-cell gap.
-            edge = max(best - res, 0.0)
-            if edge <= max_dist:
-                result[(min(a, b), max(a, b))] = edge
+        if not np.isfinite(best):
+            continue
+        # The nearest pair of cell centres is not always the nearest pair of cells: the gap
+        # between two squares is hypot(max(|dx| - res, 0), max(|dy| - res, 0)), which is up to
+        # (sqrt(2) - 1) * res shorter than the centre distance minus res for diagonal offsets.
+        # A pair with centre distance c has a gap of at least c - sqrt(2) * res, so only pairs
+        # within best + (sqrt(2) - 1) * res can beat the nearest-centre pair.
+        near = trees[a].sparse_distance_matrix(
+            cKDTree(pts_b), best + (np.sqrt(2.0) - 1.0) * res + 1e-6, output_type="ndarray"
+        )
+        delta = np.abs(pts_a[near["i"]] - pts_b[near["j"]])
+        gap = np.hypot(np.maximum(delta[:, 0] - res, 0.0), np.maximum(delta[:, 1] - res, 0.0))
+        edge = float(gap.min())
+        if edge <= max_dist:
+            result[(min(a, b), max(a, b))] = edge
     return result
 
 
@@ -221,14 +231,35 @@ def _pc_sum(areas: np.ndarray, rows: np.ndarray, cols: np.ndarray, weights: np.n
     return float(areas @ prob @ areas)
 
 
-def analyse(
-    project: Project,
-    habitat_mask: np.ndarray,
-    resistance: np.ndarray,
-    params: FragmentationParams | None = None,
-    graph: RasterGraph | None = None,
-) -> dict:
-    params = params or FragmentationParams()
+@dataclass
+class PatchGraph:
+    """Habitat patches and their straight-line edge-to-edge distances.
+
+    This is the input of PC, IIC and ECA.  It is a public object so that the same graph
+    can be exported to Conefor (``interop``) and recomputed by an independent reference
+    implementation in the tests.  ``a``, ``ids`` and the pair arrays refer to the *nodes*
+    (patches of at least ``min_patch_ha``, largest first); pair arrays hold positions in ``ids``.
+    """
+
+    labels: np.ndarray
+    n_labels: int
+    areas_cells: np.ndarray
+    areas_ha: np.ndarray  # indexed by label, 0 for the background
+    habitat_ha: float
+    landscape_ha: float
+    all_patches: np.ndarray
+    keep: np.ndarray
+    ids: list[int]
+    a: np.ndarray  # node areas, ha
+    pair_i: np.ndarray
+    pair_j: np.ndarray
+    pair_d: np.ndarray  # edge-to-edge distance, m
+    r_pair: float  # cut-off distance of the pair search, m
+    dispersal_m: float
+
+
+def patch_graph(project: Project, habitat_mask: np.ndarray, params: FragmentationParams) -> PatchGraph | None:
+    """Label the habitat patches and measure edge-to-edge distances; ``None`` if there is no habitat."""
     res = project.res
     cell_ha = res * res / 10_000.0
     landscape_ha = float(project.height * project.width * cell_ha)
@@ -240,23 +271,78 @@ def analyse(
     areas_ha = areas_cells * cell_ha
     habitat_ha = float(areas_ha.sum())
     if habitat_ha <= 0:
+        return None
+
+    all_patches = np.flatnonzero(areas_ha > 0)
+    keep = all_patches[areas_ha[all_patches] >= params.min_patch_ha]
+    nodes = keep[np.argsort(areas_ha[keep])[::-1]]  # largest first
+    if len(nodes) > params.max_patches:
+        nodes = nodes[: params.max_patches]
+    n = len(nodes)
+
+    empty = np.zeros(0, dtype=np.int64)
+    graph = PatchGraph(
+        labels=labels, n_labels=n_labels, areas_cells=areas_cells, areas_ha=areas_ha, habitat_ha=habitat_ha,
+        landscape_ha=landscape_ha, all_patches=all_patches, keep=keep, ids=[int(x) for x in nodes],
+        a=areas_ha[nodes].astype(np.float64), pair_i=empty, pair_j=empty, pair_d=np.zeros(0),
+        r_pair=d0 * float(np.log(1.0 / _P_MIN)), dispersal_m=d0,
+    )
+    if n == 0:
+        return graph
+
+    rows_g = np.repeat(np.arange(project.height), project.width)
+    cols_g = np.tile(np.arange(project.width), project.height)
+    flat = labels.ravel()
+    cnt = np.maximum(areas_cells, 1).astype(np.float64)
+    cx = np.bincount(flat, weights=cols_g + 0.5, minlength=n_labels + 1) / cnt * res
+    cy = np.bincount(flat, weights=rows_g + 0.5, minlength=n_labels + 1) / cnt * res
+    centroids = np.column_stack([cx[nodes], cy[nodes]])
+
+    points_all = _boundary_points(habitat_mask, labels, res)
+    ids = graph.ids
+    points = {i: points_all[i] for i in ids if i in points_all}
+    # Every non-empty patch has boundary cells (the raster edge counts as boundary).
+    # Conservative reach of each patch from its centroid: its bounding-box diagonal.
+    bbox_diag = np.zeros(n)
+    for pos, i in enumerate(ids):
+        pts = points[i]
+        bbox_diag[pos] = float(np.hypot(*(pts.max(axis=0) - pts.min(axis=0)))) + res
+
+    dist_pairs = _edge_distances(ids, points, centroids, bbox_diag, graph.r_pair, res)
+    graph.pair_i = np.array([p[0] for p in dist_pairs], dtype=np.int64)
+    graph.pair_j = np.array([p[1] for p in dist_pairs], dtype=np.int64)
+    graph.pair_d = np.array(list(dist_pairs.values()), dtype=np.float64)
+    return graph
+
+
+def analyse(
+    project: Project,
+    habitat_mask: np.ndarray,
+    resistance: np.ndarray,
+    params: FragmentationParams | None = None,
+    graph: RasterGraph | None = None,
+) -> dict:
+    params = params or FragmentationParams()
+    res = project.res
+    d0 = float(params.dispersal_m)
+
+    pg = patch_graph(project, habitat_mask, params)
+    if pg is None:
         return {"available": False}
+    labels, n_labels, areas_ha = pg.labels, pg.n_labels, pg.areas_ha
+    landscape_ha, habitat_ha = pg.landscape_ha, pg.habitat_ha
+    all_patches, keep, ids, a = pg.all_patches, pg.keep, pg.ids, pg.a
+    pair_i, pair_j, pair_d, r_pair = pg.pair_i, pg.pair_j, pg.pair_d, pg.r_pair
+    order = np.array(ids, dtype=np.int64)  # node labels, largest first
+    n = len(ids)
 
     # -- structure (all habitat patches, FRAGSTATS / Jaeger definitions) -------
-    all_patches = np.flatnonzero(areas_ha > 0)
     largest = float(areas_ha.max())
     mesh = float(np.sum(areas_ha**2) / landscape_ha)
     division = float(1.0 - np.sum((areas_ha / landscape_ha) ** 2))
     horizontal = np.count_nonzero(habitat_mask[:, 1:] != habitat_mask[:, :-1]) * res
     vertical = np.count_nonzero(habitat_mask[1:, :] != habitat_mask[:-1, :]) * res
     edge_density = float(horizontal + vertical) / landscape_ha  # metres of edge per hectare of landscape
-
-    keep = all_patches[areas_ha[all_patches] >= params.min_patch_ha]
-    order = keep[np.argsort(areas_ha[keep])[::-1]]
-    if len(order) > params.max_patches:
-        order = order[: params.max_patches]
-    nodes = order  # patch labels, largest first
-    n = len(nodes)
 
     iic = pc = eca = 0.0
     pc_cost = eca_cost = None
@@ -266,32 +352,6 @@ def analyse(
     dpc: dict[int, float] = {}
 
     if n:
-        a = areas_ha[nodes].astype(np.float64)
-        rows_g = np.repeat(np.arange(project.height), project.width)
-        cols_g = np.tile(np.arange(project.width), project.height)
-        flat = labels.ravel()
-        cnt = np.maximum(areas_cells, 1).astype(np.float64)
-        cx = np.bincount(flat, weights=cols_g + 0.5, minlength=n_labels + 1) / cnt * res
-        cy = np.bincount(flat, weights=rows_g + 0.5, minlength=n_labels + 1) / cnt * res
-        centroids = np.column_stack([cx[nodes], cy[nodes]])
-
-        points_all = _boundary_points(habitat_mask, labels, res)
-        ids = [int(x) for x in nodes]
-        points = {i: points_all[i] for i in ids if i in points_all}
-        ids = [i for i in ids if i in points]
-        # Conservative reach of each patch from its centroid: its bounding-box diagonal.
-        bbox_diag = np.zeros(n)
-        for pos, i in enumerate(ids):
-            pts = points[i]
-            bbox_diag[pos] = float(np.hypot(*(pts.max(axis=0) - pts.min(axis=0)))) + res
-
-        r_pair = d0 * float(np.log(1.0 / _P_MIN))
-        dist_pairs = _edge_distances(ids, points, centroids, bbox_diag, r_pair, res)
-
-        pair_i = np.array([p[0] for p in dist_pairs], dtype=np.int64)
-        pair_j = np.array([p[1] for p in dist_pairs], dtype=np.int64)
-        pair_d = np.array(list(dist_pairs.values()), dtype=np.float64)
-
         # PC: -ln p = d / d0 on every pair within the cut-off.
         weights = pair_d / d0
         pc_total = _pc_sum(a, pair_i, pair_j, weights)
