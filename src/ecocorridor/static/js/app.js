@@ -9,7 +9,7 @@ const App = (() => {
     scenario: "base",
     result: null,
     compareRows: null,
-    layers: { resistance: true, landcover: false, cost: false, hillshade: true, roads: true, labels: true },
+    layers: { resistance: true, landcover: false, cost: false, current: false, hillshade: true, roads: true, labels: true },
     routeMode: false,
     routeStart: null,
     busy: false,
@@ -109,6 +109,7 @@ const App = (() => {
         bindMap();
       }
       toggleRouteMode(false);
+      Edits.reset();
       map.clearImages();
       map.setProject(project.bounds);
       map.setData(project, null);
@@ -120,11 +121,12 @@ const App = (() => {
         syncControls();
         bindControls();
         bindShortcuts();
+        Edits.init({ getMap: () => map, onChange: scheduleRun });
         controlsBound = true;
       } else {
         syncControls();
       }
-      buildLegend(["resistance", "landcover", "cost"].find((n) => state.layers[n]) || "resistance");
+      buildLegend(["resistance", "landcover", "cost", "current"].find((n) => state.layers[n]) || "resistance");
 
       setStatus("Расчёт базового сценария…");
       await runAnalysis("base");
@@ -248,7 +250,9 @@ const App = (() => {
 
   function readParams() {
     const overrides = classOverrides();
+    const edits = Edits.list();
     return {
+      ...(edits.length ? { edits } : {}),
       ...(Object.keys(overrides).length ? { class_resistance: overrides } : {}),
       mode: $("mode").value,
       slope_weight: Number($("w-slope").value),
@@ -317,7 +321,8 @@ const App = (() => {
           map.showLabels = state.layers.labels;
         } else {
           map.setLayer(name, input.checked);
-          if (["resistance", "landcover", "cost"].includes(name)) syncLayerTabs();
+          if (name === "current" && input.checked) ensureCurrent();
+          if (["resistance", "landcover", "cost", "current"].includes(name)) syncLayerTabs();
         }
       });
     });
@@ -354,7 +359,7 @@ const App = (() => {
   }
 
   function setBaseLayer(name) {
-    ["resistance", "landcover", "cost"].forEach((layer) => {
+    ["resistance", "landcover", "cost", "current"].forEach((layer) => {
       state.layers[layer] = layer === name;
       const input = document.querySelector(`#layer-switches input[data-layer="${layer}"]`);
       if (input) input.checked = state.layers[layer];
@@ -362,10 +367,39 @@ const App = (() => {
     });
     syncLayerTabs();
     buildLegend(name);
+    if (name === "current") ensureCurrent();
+  }
+
+  /* Circuit-theory current is computed on demand (several seconds on a large raster). */
+  async function ensureCurrent() {
+    const token = state.result && state.result.token;
+    if (!token || state.currentFor === token) return;
+    const url = API.currentUrl(token);
+    setStatus("Считаю ток между ядрами (теория цепей)…");
+    $("status-dot").classList.add("busy");
+    try {
+      const response = await fetch(url);
+      if (!response.ok) {
+        let detail = "расчёт тока не удался";
+        try { detail = (await response.json()).detail || detail; } catch (_) { /* not JSON */ }
+        throw new Error(detail);
+      }
+      state.currentFor = token;
+      map.setImages({ current: url });
+      const info = await API.circuit(token);
+      const s = info.stats;
+      setStatus(`Ток: ядер ${s.cores}, пар ${s.pairs}, среднее эффективное сопротивление ${fmt(s.mean_effective_resistance, 1)}`);
+    } catch (error) {
+      toast(error.message, true);
+      setStatus("Ток не рассчитан");
+      setBaseLayer("resistance");
+    } finally {
+      $("status-dot").classList.remove("busy");
+    }
   }
 
   function syncLayerTabs() {
-    const active = ["resistance", "landcover", "cost"].find((name) => state.layers[name]) || null;
+    const active = ["resistance", "landcover", "cost", "current"].find((name) => state.layers[name]) || null;
     $("layer-tabs").querySelectorAll(".chip").forEach((chip) => chip.classList.toggle("active", chip.dataset.base === active));
   }
 
@@ -378,7 +412,11 @@ const App = (() => {
       return;
     }
     legend.style.display = "";
-    if (kind === "cost") {
+    if (kind === "current") {
+      title.textContent = "Ток между ядрами";
+      bar.style.background = "linear-gradient(90deg,#2d1060,#7c1d6f,#d44842,#faa03a,#fcffa4)";
+      legend.querySelector(".legend-ticks").innerHTML = "<span>слабый</span><span></span><span></span><span>узкое место</span>";
+    } else if (kind === "cost") {
       title.textContent = "Стоимость доступа";
       bar.style.background = "linear-gradient(90deg,#08306b,#2171b5,#6baed6,#c6dbef,#f7fbff)";
       legend.querySelector(".legend-ticks").innerHTML = "<span>0</span><span>25 %</span><span>50 %</span><span>100 %</span>";
@@ -442,6 +480,9 @@ const App = (() => {
     map.setLayer("resistance", state.layers.resistance);
     map.setLayer("landcover", state.layers.landcover);
     map.setLayer("cost", state.layers.cost);
+    map.setLayer("current", state.layers.current);
+    state.currentFor = null;
+    if (state.layers.current) ensureCurrent();
     map.setLayer("hillshade", state.layers.hillshade);
     updatePanels(result);
     updateExportLinks(result.token);
@@ -620,6 +661,7 @@ const App = (() => {
     };
 
     map.onPick = (world) => {
+      if (Edits.active()) { Edits.pick(world); return; }
       if (!state.routeMode) return;
       if (!state.routeStart) {
         state.routeStart = world;

@@ -6,7 +6,14 @@ A scenario is a small, explicit transformation of the resistance surface:
   settlements and the new cells become built-up (high resistance);
 * a new road (polyline in map coordinates) is cut into the surface;
 * riparian restoration lowers resistance within ``restoration_width_m`` of
-  streams, modelling the recovery of floodplain corridors.
+  streams, modelling the recovery of floodplain corridors;
+* user edits (``edits``), drawn on the map in project coordinates:
+
+  ``road``      polyline, ``width_m`` wide: a new road (resistance >= 400, class 9);
+  ``builtup``   polygon: new built-up area (resistance >= urban resistance, class 8);
+  ``habitat``   polygon: new forest (class 4, resistance of the forest class);
+  ``crossing``  polyline, ``width_m`` wide: a wildlife crossing, resistance capped at 3
+                inside the band (the land cover, and therefore the road, stays).
 
 The transformations are applied to the land-cover raster as well, so that the
 habitat mask used by the fragmentation metrics changes consistently.
@@ -19,7 +26,7 @@ from dataclasses import dataclass, field
 import geopandas as gpd
 import numpy as np
 from scipy.ndimage import binary_dilation, distance_transform_edt
-from shapely.geometry import LineString
+from shapely.geometry import LineString, Polygon
 
 from .dataset import Project
 from .resistance import ResistanceSurface
@@ -37,6 +44,7 @@ class Scenario:
     new_road: list[list[float]] = field(default_factory=list)
     new_road_width_m: float = 60.0
     accent: str = "#2F5D8C"
+    edits: list[dict] = field(default_factory=list)
 
     def as_dict(self) -> dict:
         return {
@@ -47,6 +55,7 @@ class Scenario:
             "restoration": self.restoration,
             "restoration_width_m": self.restoration_width_m,
             "new_road": self.new_road,
+            "edits": self.edits,
             "accent": self.accent,
         }
 
@@ -118,6 +127,53 @@ def default_scenarios(project: Project) -> list[Scenario]:
     ]
 
 
+EDIT_TYPES = ("road", "builtup", "habitat", "crossing")
+
+
+def edit_geometry(edit: dict):
+    """Shapely geometry of one edit (buffered line for ``road`` / ``crossing``)."""
+    coords = [(float(x), float(y)) for x, y in edit["coords"]]
+    kind = edit["type"]
+    if kind in ("road", "crossing"):
+        if len(coords) < 2:
+            raise ValueError("Линии нужны минимум две точки.")
+        return LineString(coords).buffer(float(edit.get("width_m", 60.0)) / 2.0, cap_style="flat")
+    if kind in ("builtup", "habitat"):
+        if len(coords) < 3:
+            raise ValueError("Полигону нужны минимум три точки.")
+        polygon = Polygon(coords)
+        return polygon if polygon.is_valid else polygon.buffer(0)
+    raise ValueError(f"Неизвестный тип правки: {kind}")
+
+
+def _apply_edits(project, edits, surface, resistance, landcover, habitat, codes, summary) -> float:
+    forest = next((c for c in project.classes if c.code == 4), None)
+    forest_resistance = surface.params.class_resistance.get(4, forest.resistance if forest else 6.0)
+    cells = 0
+    for item in edits:
+        mask = project.rasterize(gpd.GeoDataFrame(geometry=[edit_geometry(item)], crs=project.crs), all_touched=True)
+        kind = item["type"]
+        if kind == "road":
+            mask &= landcover != 1
+            resistance[mask] = np.maximum(resistance[mask], 400.0)
+            landcover[mask] = 9
+            habitat[mask] = False
+        elif kind == "builtup":
+            mask &= landcover != 1
+            resistance[mask] = np.maximum(resistance[mask], 250.0)
+            landcover[mask] = 8
+            habitat[mask] = False
+        elif kind == "habitat":
+            mask &= ~np.isin(landcover, (1, 8, 9))
+            resistance[mask] = np.minimum(resistance[mask], forest_resistance)
+            landcover[mask] = 4
+            habitat[mask] = codes is None or 4 in codes
+        elif kind == "crossing":
+            resistance[mask] = np.minimum(resistance[mask], 3.0)
+        cells += int(mask.sum())
+    return round(cells * project.res**2 / 10_000.0, 1)
+
+
 def apply_scenario(
     project: Project,
     surface: ResistanceSurface,
@@ -160,6 +216,10 @@ def apply_scenario(
         resistance[updated] *= 1.0 - float(np.clip(scenario.restoration, 0.0, 0.9))
         habitat |= riparian & np.isin(landcover, [c for c in (2, 5, 7) if codes is None or c in codes])
         summary["restored_ha"] = round(float(updated.sum() * project.res**2 / 10_000.0), 1)
+
+    if scenario.edits:
+        edited = _apply_edits(project, scenario.edits, surface, resistance, landcover, habitat, codes, summary)
+        summary["edited_ha"] = edited
 
     resistance = np.clip(resistance, 1.0, surface.params.max_resistance).astype(np.float32)
     summary["mean_resistance"] = round(float(resistance.mean()), 2)

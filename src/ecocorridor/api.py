@@ -6,6 +6,7 @@ import csv
 import io
 import json
 import logging
+import os
 import threading
 import time
 import uuid
@@ -21,8 +22,8 @@ from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 
-from . import __version__, exports, importer, online, render
-from .analysis import ModelParams, forget_project, get, route, run, serialize
+from . import __version__, circuit, exports, importer, online, render
+from .analysis import ModelParams, circuit_flow, forget_project, get, route, run, serialize
 from .corridors import CorridorParams
 from .dataset import CACHE_DIR, Project, load_demo
 from .fragmentation import HABITAT_PRESETS, FragmentationParams
@@ -66,6 +67,19 @@ def get_project(project_id: str | None) -> Project:
 register_project(load_demo(DEFAULT_PROJECT_ID))
 
 
+class EditModel(BaseModel):
+    type: Literal["road", "builtup", "habitat", "crossing"]
+    coords: list[tuple[float, float]] = Field(min_length=2, max_length=2000, description="vertices in project coordinates (metres)")
+    width_m: float = Field(60.0, ge=10.0, le=2000.0)
+
+    @field_validator("coords")
+    @classmethod
+    def _finite(cls, value):
+        if any(not (abs(x) < 1e9 and abs(y) < 1e9) for x, y in value):
+            raise ValueError("Координаты вне допустимого диапазона")
+        return value
+
+
 class ParamsModel(BaseModel):
     mode: str = "multiplicative"
     slope_weight: float = Field(0.9, ge=0.0, le=3.0)
@@ -83,6 +97,7 @@ class ParamsModel(BaseModel):
     habitat: Literal["natural", "forest", "forest_wetland"] = "natural"
     urban_growth_m: float | None = Field(None, ge=0.0, le=5000.0)
     restoration: float | None = Field(None, ge=0.0, le=0.9)
+    edits: list[EditModel] | None = Field(None, max_length=60, description="scenario edits drawn on the map")
     class_resistance: dict[int, float] | None = Field(
         None, description="Baseline resistance per land-cover class code (1…10), replaces the project's table"
     )
@@ -153,6 +168,12 @@ def _scenario(project: Project, scenario_id: str, params: ParamsModel) -> Scenar
         overrides["urban_growth_m"] = params.urban_growth_m
     if params.restoration is not None:
         overrides["restoration"] = params.restoration
+    if params.edits:
+        for item in params.edits:
+            minimum = 3 if item.type in ("builtup", "habitat") else 2
+            if len(item.coords) < minimum:
+                raise HTTPException(status_code=422, detail=f"Правка «{item.type}» требует минимум {minimum} точки.")
+        overrides["edits"] = [{"type": e.type, "coords": [list(c) for c in e.coords], "width_m": e.width_m} for e in params.edits]
     return replace(scenario, **overrides) if overrides else scenario
 
 
@@ -334,9 +355,11 @@ async def import_data(
     min_core_ha: float = Query(100.0, ge=1.0, le=100_000.0),
 ) -> dict:
     """Own data: the request body is a ZIP archive (land cover raster + optional DEM and vector layers)."""
+    if os.environ.get("ECOCORRIDOR_DISABLE_IMPORT"):
+        raise HTTPException(status_code=403, detail="Загрузка своих данных отключена на этом сервере.")
     declared = request.headers.get("content-length")
     if declared and declared.isdigit() and int(declared) > importer.MAX_ZIP_BYTES:
-        raise HTTPException(status_code=413, detail="Архив больше 400 МБ.")
+        raise HTTPException(status_code=413, detail=f"Архив больше {importer.MAX_ZIP_BYTES // (1024 * 1024)} МБ.")
     payload = await request.body()
     if not payload:
         raise HTTPException(status_code=422, detail="Пустой запрос: приложите ZIP-архив с данными.")
@@ -440,6 +463,12 @@ def layer_png(token: str, layer: str) -> Response:
             rgba = render.resistance_rgba(result.project, result.resistance)
         elif layer == "cost":
             rgba = render.cost_rgba(result.project, result.cost)
+        elif layer == "current":
+            try:
+                solved = circuit_flow(result)[0]
+            except circuit.CircuitError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
+            rgba = render.current_rgba(result.project, solved.current)
         else:
             raise HTTPException(status_code=404, detail="Unknown layer")
         cached = render.png_bytes(rgba)
@@ -447,6 +476,25 @@ def layer_png(token: str, layer: str) -> Response:
         while len(_LAYER_CACHE) > _LAYER_LIMIT:
             _LAYER_CACHE.popitem(last=False)
     return Response(content=cached, media_type="image/png", headers={"Cache-Control": "public, max-age=7200"})
+
+
+@app.get("/api/circuit/{token}")
+def circuit_summary(token: str) -> dict:
+    """Circuit-theory summary: effective resistance between cores and cumulative-current statistics."""
+    result = get(token)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Analysis expired, please re-run")
+    try:
+        solved, cores, seconds = circuit_flow(result)
+    except circuit.CircuitError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return {
+        "cores": cores,
+        "effective_resistance": np.round(solved.effective_resistance, 3).tolist(),
+        "stats": solved.stats(),
+        "seconds": seconds,
+        "method": "Circuit theory (McRae et al. 2008): 8 neighbours, mean resistance of the two cells, all core pairs",
+    }
 
 
 @app.post("/api/route")

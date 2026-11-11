@@ -56,6 +56,28 @@
         <p class="hint" id="scenario-note"></p>
       </section>
 
+      <section class="panel" id="edits-panel">
+        <div class="panel-head">
+          <h2>Свои правки</h2>
+          <span class="panel-tag" id="edit-count"></span>
+        </div>
+        <p class="hint" style="margin-top:0">Нарисуйте на карте дорогу, застройку, лес или переход через дорогу и посмотрите, как изменится связность. Правки добавляются к выбранному сценарию.</p>
+        <div class="edit-controls">
+          <select class="select" id="edit-type">
+            <option value="road">Новая дорога</option>
+            <option value="builtup">Застройка (полигон)</option>
+            <option value="habitat">Новый лес (полигон)</option>
+            <option value="crossing">Переход для животных</option>
+          </select>
+          <label class="edit-width" id="edit-width-field">ширина, м
+            <input type="number" class="input" id="edit-width" min="10" max="2000" step="10" value="60">
+          </label>
+          <button class="btn" type="button" id="edit-draw">Рисовать</button>
+        </div>
+        <ul class="edit-list" id="edit-list"></ul>
+        <button class="link-btn" type="button" id="edit-clear" hidden>убрать все правки</button>
+      </section>
+
       <section class="panel">
         <div class="panel-head">
           <h2>Поверхность сопротивления</h2>
@@ -160,6 +182,7 @@
           <label class="switch"><input type="checkbox" data-layer="resistance" checked><span class="track"></span><span class="switch-name">Сопротивление</span></label>
           <label class="switch"><input type="checkbox" data-layer="landcover"><span class="track"></span><span class="switch-name">Землепокров</span></label>
           <label class="switch"><input type="checkbox" data-layer="cost"><span class="track"></span><span class="switch-name">Стоимость доступа</span></label>
+          <label class="switch"><input type="checkbox" data-layer="current"><span class="track"></span><span class="switch-name">Ток (теория цепей)</span></label>
           <label class="switch"><input type="checkbox" data-layer="hillshade" checked><span class="track"></span><span class="switch-name">Рельеф</span></label>
           <label class="switch"><input type="checkbox" data-layer="roads" checked><span class="track"></span><span class="switch-name">Дороги и реки</span></label>
           <label class="switch"><input type="checkbox" data-layer="labels" checked><span class="track"></span><span class="switch-name">Подписи</span></label>
@@ -176,6 +199,7 @@
             <button class="chip active" data-base="resistance">Сопротивление</button>
             <button class="chip" data-base="landcover">Землепокров</button>
             <button class="chip" data-base="cost">Доступность</button>
+            <button class="chip" data-base="current" title="Теория цепей: ток между ядрами по всем маршрутам">Ток</button>
           </div>
           <div class="map-tools">
             <button class="tool" id="tool-route" title="Проложить маршрут (R)">
@@ -187,6 +211,12 @@
               <svg viewBox="0 0 24 24" width="16" height="16"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
             </button>
           </div>
+        </div>
+
+        <div class="route-banner" id="edit-banner">
+          <b>Правка.</b> <span id="edit-text">—</span>
+          <button class="link-btn" id="edit-done" type="button">готово</button>
+          <button class="link-btn" id="edit-cancel" type="button">отмена</button>
         </div>
 
         <div class="route-banner" id="route-banner">
@@ -252,6 +282,7 @@
             <option value="resistance">сопротивление</option>
             <option value="cost">накопленная стоимость</option>
             <option value="flow">поток по коридорам</option>
+            <option value="current">ток (теория цепей)</option>
             <option value="landcover">землепокров сценария</option>
           </select>
         </div>
@@ -538,6 +569,7 @@
 <script src="/static/js/api.js"></script>
 <script src="/static/js/map.js"></script>
 <script src="/static/js/charts.js"></script>
+<script src="/static/js/edits.js"></script>
 <script src="/static/js/app.js"></script>
 <script src="/static/js/territory.js"></script>
 </body>

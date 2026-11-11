@@ -17,6 +17,7 @@ RASTER_LAYERS = {
     "resistance": ("Поверхность сопротивления (относительная стоимость движения)", "float32"),
     "cost": ("Накопленная стоимость пути от ближайшего ядра", "float32"),
     "flow": ("Интенсивность использования коридоров (число проходящих путей)", "float32"),
+    "current": ("Накопленный ток (теория цепей) между ядрами", "float32"),
     "landcover": ("Землепокров сценария (классы EcoCorridor)", "uint8"),
 }
 
@@ -28,6 +29,10 @@ def raster_array(result: AnalysisResult, layer: str) -> np.ndarray:
         return np.asarray(result.cost, dtype="float32")
     if layer == "flow":
         return np.asarray(result.network.flow, dtype="float32")
+    if layer == "current":
+        from .analysis import circuit_flow
+
+        return np.asarray(circuit_flow(result)[0].current, dtype="float32")
     if layer == "landcover":
         return np.asarray(result.landcover, dtype="uint8")
     raise KeyError(layer)

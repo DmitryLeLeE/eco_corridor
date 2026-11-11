@@ -42,6 +42,7 @@ PAGES = {
     "methodology": ("docs/methodology.md", "Методика"),
     "validation": ("docs/validation.md", "Валидация"),
     "data": ("docs/data.md", "Данные"),
+    "deploy": ("docs/deploy.md", "Размещение"),
     "reproducibility": ("docs/reproducibility.md", "Воспроизводимость"),
     "science": ("docs/science.md", "Научные принципы"),
     "review": ("docs/METHODOLOGY_REVIEW.md", "Аудит методики"),
@@ -99,6 +100,12 @@ def build_demo(out: Path) -> dict:
             png.raise_for_status()
             (folder / f"{layer}.png").write_bytes(png.content)
             result["layers"][layer]["url"] = f"data/{sid}/{layer}.png"
+        current = client.get(f"/api/layers/{token}/current.png")
+        current.raise_for_status()
+        (folder / "current.png").write_bytes(current.content)
+        summary = client.get(f"/api/circuit/{token}")
+        summary.raise_for_status()
+        (folder / "circuit.json").write_text(json.dumps(summary.json(), ensure_ascii=False), encoding="utf-8")
         for name, route in (("report.html", "report.html"), ("corridors.geojson", "corridors.geojson"), ("metrics.csv", "metrics.csv")):
             resp = client.get(f"/api/export/{token}/{route}")
             resp.raise_for_status()
@@ -133,6 +140,9 @@ const API = (() => {
     compare: () => getJSON(base + "compare.json"),
     route: () => off("Прокладка маршрута"),
     sample: () => Promise.reject(new Error("static")),
+    currentUrl: (token) => `${base}${tokens[token]}/current.png`,
+    circuit: (token) => getJSON(`${base}${tokens[token]}/circuit.json`),
+    importData: () => off("Загрузка своих данных"),
     searchPlace: () => off("Поиск территории"),
     planTerritory: () => off("Загрузка территории"),
     loadTerritory: () => off("Загрузка территории"),
@@ -140,6 +150,8 @@ const API = (() => {
     reportUrl: (token) => `${base}${tokens[token]}/report.html`,
     geojsonUrl: (token) => `${base}${tokens[token]}/corridors.geojson`,
     csvUrl: (token) => `${base}${tokens[token]}/metrics.csv`,
+    gpkgUrl: () => "#",
+    rasterUrl: () => "#",
   };
 })();
 """
@@ -149,7 +161,7 @@ const API = (() => {
     page = page.replace('"/static/', '"').replace("'/static/", "'")
     banner = (
         '<div class="static-banner"><b>Статическая версия.</b> Показаны предрассчитанные результаты демонстрационного '
-        'полигона при параметрах по умолчанию; ползунки, маршруты и загрузка территорий отключены. '
+        'полигона при параметрах по умолчанию; ползунки, правки, маршруты, загрузка территорий и своих данных отключены; слой «Ток» (теория цепей) предрассчитан. '
         '<a href="../index.html">← к документации</a> · <a href="../guide.html">справка</a> · '
         '<a href="https://github.com/DmitryLeLeE/eco_corridor">код</a></div>'
     )
@@ -157,7 +169,7 @@ const API = (() => {
     lock = """<script>
 document.addEventListener("DOMContentLoaded", () => {
   document.querySelectorAll(".sidebar input, .sidebar select, [data-reset]").forEach((n) => { n.disabled = true; });
-  ["btn-run", "btn-territory", "tool-route"].forEach((id) => { const n = document.getElementById(id); if (n) n.style.display = "none"; });
+  ["btn-run", "btn-territory", "tool-route", "edits-panel", "class-editor", "btn-gpkg", "btn-raster"].forEach((id) => { const n = document.getElementById(id); if (n) n.style.display = "none"; });
 });
 </script>
 </body>"""

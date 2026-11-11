@@ -47,6 +47,15 @@ def _stops_to_lut(stops: list[tuple[float, tuple[int, int, int]]], size: int = 2
 RESISTANCE_LUT = _stops_to_lut(RESISTANCE_STOPS)
 COST_LUT = _stops_to_lut(COST_STOPS)
 
+CURRENT_STOPS: list[tuple[float, tuple[int, int, int]]] = [  # dark violet -> orange -> pale yellow (sequential)
+    (0.00, (45, 16, 96)),
+    (0.30, (124, 29, 111)),
+    (0.55, (212, 72, 66)),
+    (0.80, (250, 160, 58)),
+    (1.00, (252, 255, 164)),
+]
+CURRENT_LUT = _stops_to_lut(CURRENT_STOPS)
+
 
 def shade_field(project: Project, exaggeration: float = 2.2) -> np.ndarray:
     """Hillshade multiplier in roughly 0.55..1.35 (1.0 = flat lit surface)."""
@@ -126,6 +135,24 @@ def cost_rgba(project: Project, cost: np.ndarray) -> np.ndarray:
     rgba = np.empty((*project.shape, 4), dtype=np.uint8)
     rgba[..., :3] = rgb.astype(np.uint8)
     rgba[..., 3] = np.clip(230 * (1.0 - t**0.6), 0, 230).astype(np.uint8)
+    return rgba
+
+
+def current_rgba(project: Project, current: np.ndarray) -> np.ndarray:
+    """Cumulative circuit current: log scale between the median and the 99.7th percentile of non-zero cells."""
+    values = np.asarray(current, dtype=np.float64)
+    positive = values[values > 0]
+    rgba = np.zeros((*project.shape, 4), dtype=np.uint8)
+    if positive.size == 0:
+        return rgba
+    vmin = float(np.percentile(positive, 40))
+    vmax = float(max(np.percentile(positive, 99.7), vmin * 1.5))
+    rgb = _apply_lut(values, CURRENT_LUT, vmin, vmax, log=True).astype(np.float64)
+    shade = shade_field(project, exaggeration=1.4)
+    rgb = _tone(rgb, shade, strength=0.35)
+    t = np.clip((np.log(np.maximum(values, 1e-9)) - math.log(vmin)) / (math.log(vmax) - math.log(vmin)), 0.0, 1.0)
+    rgba[..., :3] = rgb.astype(np.uint8)
+    rgba[..., 3] = np.where(values > 0, 60 + 190 * t, 0).astype(np.uint8)
     return rgba
 
 

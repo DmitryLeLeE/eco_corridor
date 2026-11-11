@@ -236,3 +236,66 @@ def test_api_class_resistance(client):
     assert bad.status_code == 422
     bad = client.post("/api/analyze", json={"scenario": "base", "params": {"class_resistance": {"4": 0.2}}})
     assert bad.status_code == 422
+
+
+# ---------------------------------------------------- drawn scenario edits
+def test_edits_change_surface_and_landcover():
+    from ecocorridor.scenarios import Scenario
+
+    project = load_demo()
+    left, bottom, right, top = project.bounds
+    cx, cy = (left + right) / 2, (bottom + top) / 2
+    base = run(project, api.SCENARIOS["demo"]["base"])
+    road = [[cx - 8000, cy], [cx + 8000, cy]]
+    scenario = Scenario("custom", "c", "", edits=[{"type": "road", "coords": road, "width_m": 100}])
+    result = run(project, scenario)
+    import geopandas as gpd
+
+    from ecocorridor.scenarios import edit_geometry
+
+    mask = project.rasterize(gpd.GeoDataFrame(geometry=[edit_geometry(scenario.edits[0])], crs=project.crs), all_touched=True)
+    assert (result.landcover[mask & (project.landcover != 1)] == 9).all()
+    assert (result.resistance[mask & (project.landcover != 1)] >= 400).all()
+    assert result.scenario_summary["edited_ha"] > 0
+    assert result.token != base.token
+
+    # A crossing over the same road restores passage: resistance capped at 3 but land cover stays road.
+    both = Scenario("custom2", "c", "", edits=[
+        {"type": "road", "coords": road, "width_m": 100},
+        {"type": "crossing", "coords": [[cx, cy - 400], [cx, cy + 400]], "width_m": 200},
+    ])
+    crossed = run(project, both)
+    row, col = (lambda rc: (int(rc[1]), int(rc[0])))(~project.transform * (cx, cy))
+    assert crossed.resistance[row, col] <= 3.0 and crossed.landcover[row, col] == 9
+    assert crossed.network.stats.get("mean_resistance") is not None
+
+
+def test_builtup_and_habitat_polygons():
+    from ecocorridor.scenarios import Scenario
+
+    project = load_demo()
+    left, bottom, right, top = project.bounds
+    cx, cy = (left + right) / 2, (bottom + top) / 2
+    square = [[cx - 1500, cy - 1500], [cx + 1500, cy - 1500], [cx + 1500, cy + 1500], [cx - 1500, cy + 1500]]
+    built = run(project, Scenario("b", "b", "", edits=[{"type": "builtup", "coords": square}]))
+    assert (built.landcover == 8).sum() > (project.landcover == 8).sum()
+    assert built.habitat.sum() < run(project, api.SCENARIOS["demo"]["base"]).habitat.sum()
+    forest = run(project, Scenario("h", "h", "", edits=[{"type": "habitat", "coords": square}]))
+    assert forest.habitat.sum() >= run(project, api.SCENARIOS["demo"]["base"]).habitat.sum()
+
+
+def test_api_edits_validation_and_effect(client):
+    left, bottom, right, top = (lambda b: b)(load_demo().bounds)
+    cx, cy = (left + right) / 2, (bottom + top) / 2
+    ok = client.post("/api/analyze", json={"scenario": "base", "params": {"edits": [
+        {"type": "road", "coords": [[cx - 9000, cy], [cx + 9000, cy]], "width_m": 80}]}})
+    assert ok.status_code == 200, ok.text
+    plain = client.post("/api/analyze", json={"scenario": "base"}).json()
+    assert ok.json()["token"] != plain["token"]
+    assert ok.json()["scenario_summary"]["edited_ha"] > 0
+    too_short = client.post("/api/analyze", json={"scenario": "base", "params": {"edits": [
+        {"type": "builtup", "coords": [[0, 0], [1, 1]]}]}})
+    assert too_short.status_code == 422
+    bad_type = client.post("/api/analyze", json={"scenario": "base", "params": {"edits": [
+        {"type": "tunnel", "coords": [[0, 0], [1, 1]]}]}})
+    assert bad_type.status_code == 422

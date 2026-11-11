@@ -42,6 +42,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import tempfile
 import zipfile
 from pathlib import Path
@@ -71,7 +72,7 @@ from .online import (
 SCHEMES = ("ecocorridor", "worldcover", "custom")
 RASTER_EXT = {".tif", ".tiff", ".img", ".vrt", ".asc"}
 VECTOR_EXT = {".geojson", ".json", ".gpkg", ".shp"}
-MAX_ZIP_BYTES = 400 * 1024 * 1024
+MAX_ZIP_BYTES = int(float(os.environ.get("ECOCORRIDOR_MAX_UPLOAD_MB", "400")) * 1024 * 1024)
 
 ROLE_WORDS = {
     "landcover": ("landcover", "land_cover", "lulc", "cover", "lc"),
@@ -416,7 +417,7 @@ def import_zip(
     import io
 
     if len(payload) > MAX_ZIP_BYTES:
-        raise ImportError_("Архив больше 400 МБ.")
+        raise ImportError_(f"Архив больше {MAX_ZIP_BYTES // (1024 * 1024)} МБ.")
     try:
         archive = zipfile.ZipFile(io.BytesIO(payload))
     except zipfile.BadZipFile as exc:

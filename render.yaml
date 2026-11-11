@@ -1,0 +1,13 @@
+# Render.com blueprint: New + -> Blueprint -> choose the repository.
+# The free plan sleeps when idle and has no persistent disk: the cache of loaded territories is lost on restart.
+services:
+  - type: web
+    name: ecocorridor
+    runtime: docker
+    plan: free
+    healthCheckPath: /api/health
+    envVars:
+      - key: ECOCORRIDOR_MAX_UPLOAD_MB
+        value: "50"
+      - key: ECOCORRIDOR_CACHE
+        value: /tmp/ecocorridor-cache

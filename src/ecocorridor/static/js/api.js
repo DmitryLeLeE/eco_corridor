@@ -38,6 +38,8 @@ const API = (() => {
     sample: (token, x, y) => request(`/api/sample/${token}?x=${x.toFixed(1)}&y=${y.toFixed(1)}`),
     reportUrl: (token) => `/api/export/${token}/report.html`,
     geojsonUrl: (token) => `/api/export/${token}/corridors.geojson`,
+    currentUrl: (token) => `/api/layers/${token}/current.png`,
+    circuit: (token) => request(`/api/circuit/${token}`),
     gpkgUrl: (token) => `/api/export/${token}/result.gpkg`,
     rasterUrl: (token, layer) => `/api/export/${token}/${layer}.tif`,
     csvUrl: (token) => `/api/export/${token}/metrics.csv`,

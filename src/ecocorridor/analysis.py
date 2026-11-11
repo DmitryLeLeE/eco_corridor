@@ -51,6 +51,7 @@ class AnalysisResult:
     cores: gpd.GeoDataFrame
     scenario_summary: dict
     elapsed: float
+    extras: dict = field(default_factory=dict)  # lazily computed products (circuit current)
 
     def cache_key(self) -> str:
         return self.token
@@ -246,6 +247,36 @@ def _pct(value: float | None, base: float | None) -> float | None:
     if not value or not base:
         return None
     return round((float(value) / float(base) - 1.0) * 100.0, 1)
+
+
+def circuit_flow(result: AnalysisResult):
+    """Circuit-theory current for a result (computed once, on first request).
+
+    Returns ``(CircuitResult, cores)`` where ``cores`` lists id / name / area of the cores used
+    (largest first, at most ``circuit.MAX_CORES``).  Overlapping core polygons are made disjoint.
+    """
+    cached = result.extras.get("circuit")
+    if cached is not None:
+        return cached
+    from . import circuit
+    from .corridors import _core_masks
+
+    masks = sorted(_core_masks(result.project), key=lambda item: item[0]["area_ha"], reverse=True)
+    taken = np.zeros(result.project.shape, dtype=bool)
+    chosen: list[tuple[dict, np.ndarray]] = []
+    for props, mask in masks:
+        mask = mask & ~taken
+        if not mask.any():
+            continue
+        taken |= mask
+        chosen.append((props, mask))
+        if len(chosen) == circuit.MAX_CORES:
+            break
+    started = time.perf_counter()
+    solved = circuit.solve_circuit(result.resistance, [m for _, m in chosen], neighbours=8)
+    info = [{"id": p["id"], "name": p["name"], "area_ha": p["area_ha"]} for p, _ in chosen]
+    result.extras["circuit"] = (solved, info, round(time.perf_counter() - started, 2))
+    return result.extras["circuit"]
 
 
 def _layer(result: AnalysisResult, name: str) -> dict:

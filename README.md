@@ -11,14 +11,14 @@ git clone https://github.com/DmitryLeLeE/eco_corridor && cd eco_corridor
 pip install -e .                       # для тестов: pip install -e ".[dev]"
 ecocorridor                            # или: python -m ecocorridor --port 8000
 # откройте http://127.0.0.1:8000
-python -m pytest -q                    # 102 теста
+python -m pytest -q                    # 117 тестов
 ```
 
 **Windows без установки Python.** На странице [Releases](https://github.com/DmitryLeLeE/eco_corridor/releases) лежит архив `ecocorridor-<версия>-windows-x64.zip`: распакуйте и запустите `ecocorridor.exe`. Откроется окно консоли (его нельзя закрывать, пока вы работаете) и браузер с приложением. Онлайн-загрузка территорий идёт через интернет, кэш хранится в `%USERPROFILE%\.cache\ecocorridor`. Приложение не подписано цифровой подписью, поэтому Windows SmartScreen может показать предупреждение («Подробнее» → «Выполнить в любом случае»).
 
 Проверка загрузки на реальных сервисах (нужен интернет): `python scripts/smoke_online.py`.
 
-Docker: `docker build -t ecocorridor . && docker run -p 8000:8000 -v ecocorridor-data:/data ecocorridor`.
+Docker: `docker build -t ecocorridor . && docker run -p 8000:8000 -v ecocorridor-data:/data ecocorridor`. Размещение на сервере: [docs/deploy.md](docs/deploy.md).
 
 Документация: <https://dmitrylelee.github.io/eco_corridor/> · Лицензия кода: MIT · Как цитировать: `CITATION.cff` · [CHANGELOG](CHANGELOG.md) · [Как внести вклад](CONTRIBUTING.md).
 

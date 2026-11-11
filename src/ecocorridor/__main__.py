@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 import threading
 import webbrowser
@@ -16,7 +17,8 @@ def main(argv: list[str] | None = None) -> None:
         description="EcoCorridor: ecological corridors and landscape connectivity (web application).",
     )
     parser.add_argument("--host", default="127.0.0.1", help="address to listen on (default: 127.0.0.1)")
-    parser.add_argument("--port", type=int, default=8000, help="port (default: 8000)")
+    parser.add_argument("--port", type=int, default=int(os.environ.get("PORT", "8000")),
+                        help="port (default: $PORT or 8000)")
     parser.add_argument("--open", dest="open_browser", action="store_true", default=None,
                         help="open the application in the default browser once the server is up")
     parser.add_argument("--no-browser", dest="open_browser", action="store_false",

@@ -15,6 +15,7 @@ class MapView {
       landcover: { img: null, visible: false, alpha: 1, z: 1 },
       resistance: { img: null, visible: true, alpha: 0.93, z: 2 },
       cost: { img: null, visible: false, alpha: 0.85, z: 3 },
+      current: { img: null, visible: false, alpha: 0.92, z: 4 },
     };
     this.data = { cores: [], corridors: [], corridorArea: [], pinchpoints: [], roads: [], rivers: [], settlements: [] };
     this.showRoads = true;
@@ -23,6 +24,9 @@ class MapView {
     this.highlight = null;
     this.route = null;
     this.routePoints = [];
+    this.edits = [];
+    this.draft = null;
+    this.drawing = false;
     this.rasterDirty = true;
     this.offscreen = document.createElement("canvas");
     this.offctx = this.offscreen.getContext("2d");
@@ -238,6 +242,7 @@ class MapView {
 
     canvas.addEventListener("dblclick", (event) => {
       event.preventDefault();
+      if (this.drawing) return;
       this.zoomAt(1.9, event.offsetX, event.offsetY);
     });
 
@@ -350,6 +355,7 @@ class MapView {
     this._drawPinchpoints(ctx, t);
     if (this.showRoads) this._drawSettlements(ctx);
     if (this.showLabels) this._drawLabels(ctx, x0, y0);
+    this._drawEdits(ctx);
     this._drawRoute(ctx, t);
     ctx.restore();
   }
@@ -604,6 +610,40 @@ class MapView {
       ctx.strokeText(label, px, py);
       ctx.fillStyle = "#0b3d24";
       ctx.fillText(label, px, py);
+    }
+    ctx.restore();
+  }
+
+  _drawEdits(ctx) {
+    const items = [...(this.edits || []), ...(this.draft ? [{ ...this.draft, draft: true }] : [])];
+    if (!items.length) return;
+    ctx.save();
+    for (const item of items) {
+      const style = item.style;
+      if (!style || !item.coords.length) continue;
+      const pts = item.coords.map((c) => this.toScreen(c));
+      ctx.beginPath();
+      pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+      if (style.line) {
+        ctx.lineJoin = "round";
+        ctx.lineCap = "butt";
+        ctx.strokeStyle = style.fill;
+        ctx.lineWidth = Math.max(4, item.width_m * this.view.scale);
+        ctx.stroke();
+        ctx.strokeStyle = style.color;
+        ctx.lineWidth = 1.6;
+        ctx.setLineDash(item.draft ? [6, 5] : []);
+        ctx.stroke();
+      } else {
+        if (pts.length >= 3 && !item.draft) ctx.closePath();
+        if (pts.length >= 3) { ctx.fillStyle = style.fill; ctx.fill(); }
+        ctx.strokeStyle = style.color;
+        ctx.lineWidth = 2;
+        ctx.setLineDash(item.draft ? [6, 5] : []);
+        ctx.stroke();
+      }
+      ctx.setLineDash([]);
+      if (item.draft) for (const p of pts) this._marker(ctx, p, style.color);
     }
     ctx.restore();
   }

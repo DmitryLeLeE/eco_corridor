@@ -713,3 +713,14 @@ input[type="range"]::-moz-range-thumb { background: #ffffff; border: 2px solid v
 .class-row input { padding: 3px 6px; font-size: 11.5px; text-align: right; }
 .class-row input.edited { border-color: var(--accent); }
 .class-row input.invalid { border-color: var(--red); }
+
+.edit-controls { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: end; margin-top: 8px; }
+.edit-controls .select { grid-column: 1 / 2; }
+.edit-controls .btn { grid-column: 2 / 3; grid-row: 1; }
+.edit-width { grid-column: 1 / 3; display: flex; align-items: center; justify-content: space-between; font-size: 11.5px; color: var(--text-dim); }
+.edit-width input { width: 80px; padding: 3px 6px; text-align: right; }
+.edit-list { list-style: none; margin: 8px 0 4px; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.edit-list li { display: grid; grid-template-columns: 10px 1fr auto; gap: 8px; align-items: center; font-size: 11.5px; color: var(--text-dim); }
+.edit-list i { width: 10px; height: 10px; border-radius: 2px; display: block; }
+#edit-draw.active { border-color: var(--accent); color: var(--accent); }
+.edit-width[hidden] { display: none; }
