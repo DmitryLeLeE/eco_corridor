@@ -11,7 +11,7 @@ git clone https://github.com/DmitryLeLeE/eco_corridor && cd eco_corridor
 pip install -e .                       # для тестов: pip install -e ".[dev]"
 ecocorridor                            # или: python -m ecocorridor --port 8000
 # откройте http://127.0.0.1:8000
-python -m pytest -q                    # 45 тестов
+python -m pytest -q                    # 50 тестов
 ```
 
 Docker: `docker build -t ecocorridor . && docker run -p 8000:8000 -v ecocorridor-data:/data ecocorridor`.
@@ -64,7 +64,7 @@ API: `GET /api/territory/search?q=`, `POST /api/territory/plan`, `POST /api/terr
 
 **Остаётся ограничением** (подробно — в документе):
 
-* PC/IIC/MESH считаются по прямым расстояниям и **не реагируют на изменение одного лишь сопротивления** (например, сценарий «Восстановление пойм» даёт ΔPC = 0); нужен режим cost-weighted расстояний;
+* PC, IIC и MESH считаются по прямым расстояниям и **не реагируют на изменение одного лишь сопротивления** (сценарий «Восстановление пойм» даёт ΔPC = 0); для проницаемости есть **PC и ECA по стоимости** (эффективное расстояние = стоимость пути / опорное сопротивление, по умолчанию 10, не откалибровано; до 400 крупнейших патчей);
 * least-cost path — один оптимальный путь, не теория цепей; «узкие места» — эвристика, а не pinch points Linkage Mapper;
 * сопротивления классов экспертные и не откалиброваны; результат чувствителен к ним: при разбросе ×exp(N(0; 0,5)) положение коридоров совпало с базовым лишь на ~0,45 (IoU), остов — на 0,97 (`python scripts/sensitivity.py`);
 * точность WorldCover около 77 %, OSM неполон в малонаселённых районах.

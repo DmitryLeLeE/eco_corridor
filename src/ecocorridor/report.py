@@ -173,7 +173,7 @@ def build_report(project: Project, result: AnalysisResult) -> str:
   h1 {{ font-size:34px; line-height:1.15; margin:8px 0 6px; letter-spacing:-.01em; }}
   .sub {{ color:var(--muted); font-size:15px; max-width:720px; }}
   .stamp {{ text-align:right; font-size:12px; color:var(--muted); white-space:nowrap; }}
-  .kpis {{ display:grid; grid-template-columns:repeat(5,1fr); gap:14px; margin:26px 0 8px; }}
+  .kpis {{ display:grid; grid-template-columns:repeat(6,1fr); gap:14px; margin:26px 0 8px; }}
   .kpi {{ border:1px solid var(--line); background:#fff; border-radius:10px; padding:14px 16px; }}
   .kpi b {{ display:block; font-size:26px; font-weight:700; letter-spacing:-.02em; }}
   .kpi span {{ font-size:11.5px; color:var(--muted); text-transform:uppercase; letter-spacing:.08em; }}
@@ -212,6 +212,7 @@ def build_report(project: Project, result: AnalysisResult) -> str:
   <div class="kpis">
     <div class="kpi"><span>Эффективный размер, MESH</span><b>{_fmt(frag.get('mesh_ha'), 0)}<small> га</small></b></div>
     <div class="kpi"><span>Вероятностная связность, PC</span><b>{_fmt(frag.get('pc'), 3)}</b></div>
+    <div class="kpi"><span>PC по стоимости</span><b>{_fmt(frag.get('pc_cost'), 3)}</b></div>
     <div class="kpi"><span>Индекс IIC</span><b>{_fmt(frag.get('iic'), 3)}</b></div>
     <div class="kpi"><span>Длина сети коридоров</span><b>{_fmt(stats.get('total_length_km'), 0)}<small> км</small></b></div>
     <div class="kpi"><span>Узких мест</span><b>{_fmt(stats.get('pinchpoint_count'))}</b></div>

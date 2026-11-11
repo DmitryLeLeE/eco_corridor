@@ -13,7 +13,7 @@ whole pipeline, and compares with the unperturbed run:
                          (the cost-weighted paths are what actually react to resistance)
 * PC / MESH variation  - reported for completeness: both use straight-line distances between
                          patches, so they are invariant to resistance *by construction*
-* scenario ranking     - how often the scenarios keep the baseline order of change in PC
+* scenario ranking     - how often the scenarios keep the baseline order of change in the cost-weighted PC
 
 Usage::
 
@@ -84,7 +84,11 @@ def evaluate(project: Project, params: ModelParams):
     runs = {sid: analysis.run(project, s, params) for sid, s in scenarios.items()}
     base_pc = runs["base"].fragmentation["pc"]
     delta = {sid: (r.fragmentation["pc"] - base_pc) / base_pc * 100.0 if base_pc else 0.0 for sid, r in runs.items() if sid != "base"}
-    return runs["base"], delta
+    base_cost = runs["base"].fragmentation["pc_cost"]
+    delta_cost = {
+        sid: (r.fragmentation["pc_cost"] - base_cost) / base_cost * 100.0 if base_cost else 0.0 for sid, r in runs.items() if sid != "base"
+    }
+    return runs["base"], delta, delta_cost
 
 
 def main() -> None:
@@ -101,21 +105,23 @@ def main() -> None:
     params = ModelParams()
     rng = np.random.default_rng(args.seed)
 
-    base_run, base_delta = evaluate(project, params)
+    base_run, base_delta, base_delta_cost = evaluate(project, params)
     base_links = links_of(base_run)
     base_backbone = backbone_of(base_run)
     base_cells = corridor_cells(base_run, project, params)
     base_pc = base_run.fragmentation["pc"]
-    print(f"Проект: {project.name}; базовый PC = {base_pc:.4f}, связей: {len(base_links)}", file=sys.stderr)
+    base_pc_cost = base_run.fragmentation["pc_cost"]
+    print(f"Проект: {project.name}; базовый PC = {base_pc:.4f}, PC по стоимости = {base_pc_cost:.4f}, связей: {len(base_links)}", file=sys.stderr)
 
     freq: dict[tuple[int, int], int] = {}
-    jac, pcs, meshes, bb_jac, cell_iou, costs = [], [], [], [], [], []
+    jac, pcs, pcs_cost, meshes, bb_jac, cell_iou, costs = [], [], [], [], [], [], []
     deltas: dict[str, list[float]] = {k: [] for k in base_delta}
+    deltas_cost: dict[str, list[float]] = {k: [] for k in base_delta}
     same_order = 0
-    base_order = sorted(base_delta, key=base_delta.get)
+    base_order = sorted(base_delta_cost, key=base_delta_cost.get)
     for k in range(args.n):
         proj = perturbed(project, rng, args.sigma, f"s{k}")
-        run, delta = evaluate(proj, perturbed_params(params, rng, args.weight_spread))
+        run, delta, delta_cost = evaluate(proj, perturbed_params(params, rng, args.weight_spread))
         found = links_of(run)
         backbone = backbone_of(run)
         for link in backbone:
@@ -125,10 +131,12 @@ def main() -> None:
         cell_iou.append(iou(corridor_cells(run, proj, params), base_cells))
         costs.append(run.network.stats["network_cost"])
         pcs.append(run.fragmentation["pc"])
+        pcs_cost.append(run.fragmentation["pc_cost"])
         meshes.append(run.fragmentation["mesh_ha"])
         for sid, value in delta.items():
             deltas[sid].append(value)
-        same_order += sorted(delta, key=delta.get) == base_order
+            deltas_cost[sid].append(delta_cost[sid])
+        same_order += sorted(delta_cost, key=delta_cost.get) == base_order
         analysis.forget_project(proj.id)
         print(f"  {k + 1}/{args.n}", end="\r", file=sys.stderr)
 
@@ -142,15 +150,17 @@ def main() -> None:
         "draws": args.n,
         "sigma": args.sigma,
         "weight_spread": args.weight_spread,
-        "baseline": {"pc": base_pc, "links": sorted(base_links), "backbone": sorted(base_backbone), "delta_pc_pct": base_delta},
+        "baseline": {"pc": base_pc, "pc_cost": base_pc_cost, "delta_pc_cost_pct": base_delta_cost, "links": sorted(base_links), "backbone": sorted(base_backbone), "delta_pc_pct": base_delta},
         "backbone_frequency": {f"{a}-{b}": freq.get((a, b), 0) / args.n for a, b in sorted(set(freq) | set(base_links))},
         "link_set_jaccard": spread(jac),
         "backbone_jaccard": spread(bb_jac),
         "corridor_cells_iou": spread(cell_iou),
         "network_cost": spread(costs),
         "pc": spread(pcs),
+        "pc_cost": spread(pcs_cost),
         "mesh_ha": spread(meshes),
         "delta_pc_pct": {sid: spread(v) for sid, v in deltas.items()},
+        "delta_pc_cost_pct": {sid: spread(v) for sid, v in deltas_cost.items()},
         "scenario_order_kept": same_order / args.n,
         "baseline_scenario_order": base_order,
     }
@@ -163,15 +173,16 @@ def main() -> None:
     print(f"Остов (MST): Jaccard с базовым — среднее {summary['backbone_jaccard']['mean']:.2f}, минимум {summary['backbone_jaccard']['min']:.2f}.")
     print(f"Положение коридоров (IoU полос шириной коридора): среднее {summary['corridor_cells_iou']['mean']:.2f}, минимум {summary['corridor_cells_iou']['min']:.2f}.")
     print(f"Стоимость сети: CV {summary['network_cost']['cv']:.0%}.")
-    print(f"PC: {summary['pc']['mean']:.4f} ± {summary['pc']['sd']:.4f} (CV {summary['pc']['cv']:.1%}) — не зависит от сопротивления по построению.\n")
+    print(f"PC: {summary['pc']['mean']:.4f} ± {summary['pc']['sd']:.4f} (CV {summary['pc']['cv']:.1%}) — не зависит от сопротивления по построению.")
+    print(f"PC по стоимости: {summary['pc_cost']['mean']:.4f} ± {summary['pc_cost']['sd']:.4f} (CV {summary['pc_cost']['cv']:.1%}).\n")
     print("| Связь | в остове, доля прогонов | в базовом остове |\n|---|---|---|")
     for key, share in summary["backbone_frequency"].items():
         a, b = (int(x) for x in key.split("-"))
         print(f"| {key} | {share:.0%} | {'да' if (a, b) in base_backbone else 'нет'} |")
-    print("\n| Сценарий | ΔPC базовый, % | среднее, % | SD | диапазон |\n|---|---|---|---|---|")
-    for sid, s_ in summary["delta_pc_pct"].items():
-        print(f"| {sid} | {base_delta[sid]:+.2f} | {s_['mean']:+.2f} | {s_['sd']:.2f} | {s_['min']:+.2f} … {s_['max']:+.2f} |")
-    print(f"\nПорядок сценариев по ΔPC сохранился в {summary['scenario_order_kept']:.0%} прогонов (базовый: {' < '.join(base_order)}).")
+    print("\n| Сценарий | ΔPC по стоимости, базовый, % | среднее, % | SD | диапазон |\n|---|---|---|---|---|")
+    for sid, s_ in summary["delta_pc_cost_pct"].items():
+        print(f"| {sid} | {base_delta_cost[sid]:+.2f} | {s_['mean']:+.2f} | {s_['sd']:.2f} | {s_['min']:+.2f} … {s_['max']:+.2f} |")
+    print(f"\nПорядок сценариев по ΔPC (по стоимости) сохранился в {summary['scenario_order_kept']:.0%} прогонов (базовый: {' < '.join(base_order)}).")
 
 if __name__ == "__main__":
     main()

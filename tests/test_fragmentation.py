@@ -105,3 +105,75 @@ def test_fully_connected_landscape_has_pc_one(toy):
 def test_no_habitat_is_reported_unavailable(toy):
     lc = np.full((5, 5), 6)
     assert _run(toy(lc, RES), lc == 4) == {"available": False}
+
+
+# -- cost-weighted PC / ECA ------------------------------------------------------
+
+
+def _two_blocks(toy, gap_cells: int):
+    """Two 3x3-cell habitat blocks facing each other across ``gap_cells`` matrix cells."""
+    lc = np.full((9, 9 + gap_cells + 3), 6)
+    lc[3:6, 3:6] = 4
+    lc[3:6, 6 + gap_cells : 9 + gap_cells] = 4
+    return toy(lc, RES), lc
+
+
+def _cost_run(project, lc, resistance, d0=800.0, ref=10.0):
+    from ecocorridor.costpath import RasterGraph
+
+    params = FragmentationParams(min_patch_ha=0.5, dispersal_m=d0, reference_resistance=ref)
+    graph = RasterGraph(resistance.astype(np.float32), project.res, neighbours=8)
+    return analyse(project, lc == 4, resistance.astype(np.float32), params, graph=graph)
+
+
+def test_cost_pc_equals_euclidean_pc_when_resistance_equals_reference(toy):
+    project, lc = _two_blocks(toy, gap_cells=4)
+    f = _cost_run(project, lc, np.full(lc.shape, 10.0))
+    # Uniform R = reference: the least-cost path is the straight line, so both PC agree.
+    assert math.isclose(f["pc_cost"], f["pc"], rel_tol=1e-9)
+    assert math.isclose(f["eca_cost_ha"], f["eca_ha"], rel_tol=1e-6)
+
+
+def test_cost_pc_closed_form_for_doubled_matrix_resistance(toy):
+    g = 4
+    project, lc = _two_blocks(toy, gap_cells=g)
+    R = np.full(lc.shape, 10.0)
+    R[lc != 4] = 20.0  # matrix twice as hard as the reference, habitat at the reference
+    f = _cost_run(project, lc, R)
+    # Path of g + 1 steps: the first and the last average a habitat and a matrix cell
+    # (15), the g - 1 inner steps cost 20.  Cost / 10 - one cell is the edge distance 2 g cells.
+    steps = 2 * 15 + (g - 1) * 20
+    d_eff = steps * RES / 10.0 - RES
+    assert math.isclose(d_eff, 2 * g * RES)
+    a = 9.0
+    L = lc.size * 1.0
+    expected = (2 * a**2 + 2 * a * a * math.exp(-d_eff / 800.0)) / L**2
+    assert abs(f["pc_cost"] - expected) <= 5e-7  # the API rounds indices to 6 decimals
+    # The straight-line PC does not see the resistance at all.
+    f_flat = _cost_run(project, lc, np.full(lc.shape, 10.0))
+    assert math.isclose(f["pc"], f_flat["pc"], rel_tol=1e-12)
+    assert f["pc_cost"] < f_flat["pc_cost"]
+
+
+def test_cost_pc_drops_behind_a_barrier_but_euclidean_pc_does_not(toy):
+    project, lc = _two_blocks(toy, gap_cells=6)
+    open_R = np.full(lc.shape, 10.0)
+    walled = open_R.copy()
+    walled[:, 9:12] = 5000.0  # an almost impassable belt across the whole gap
+    f_open = _cost_run(project, lc, open_R)
+    f_wall = _cost_run(project, lc, walled)
+    assert f_wall["pc_cost"] < f_open["pc_cost"]
+    assert f_wall["eca_cost_ha"] < f_open["eca_cost_ha"]
+    assert math.isclose(f_wall["pc"], f_open["pc"], rel_tol=1e-12)
+
+
+def test_cost_pc_without_graph_is_not_reported(toy):
+    project, lc = _two_blocks(toy, gap_cells=4)
+    f = _run(project, lc == 4)
+    assert f["pc_cost"] is None and f["cost_patches"] == 0
+
+
+def test_cost_pc_never_exceeds_one_for_a_connected_landscape(toy):
+    lc = np.full((6, 6), 4)
+    f = _cost_run(toy(lc, RES), lc, np.full(lc.shape, 3.0))
+    assert math.isclose(f["pc_cost"], 1.0, rel_tol=1e-9)

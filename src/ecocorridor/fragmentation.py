@@ -63,6 +63,7 @@ from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import connected_components, dijkstra, shortest_path
 from scipy.spatial import cKDTree
 
+from .costpath import RasterGraph
 from .dataset import Project
 
 # Probabilities below this value are treated as zero when building the PC graph
@@ -77,6 +78,12 @@ class FragmentationParams:
     dispersal_m: float = 5_000.0
     natural_codes: tuple[int, ...] = (2, 3, 4, 5, 7, 10)
     max_patches: int = 2_000
+    # Cost-weighted variants (pc_cost, eca_cost_ha): a least-cost path across the
+    # resistance surface replaces the straight line, and a step of length L over
+    # resistance R counts as L * R / reference_resistance metres of "effective distance".
+    cost_distance: bool = True
+    reference_resistance: float = 10.0
+    max_patches_cost: int = 400
 
     def as_dict(self) -> dict:
         return {
@@ -84,6 +91,9 @@ class FragmentationParams:
             "dispersal_m": self.dispersal_m,
             "natural_codes": list(self.natural_codes),
             "max_patches": self.max_patches,
+            "cost_distance": self.cost_distance,
+            "reference_resistance": self.reference_resistance,
+            "max_patches_cost": self.max_patches_cost,
         }
 
 
@@ -152,6 +162,51 @@ def _edge_distances(
     return result
 
 
+def _cost_distances(
+    graph: RasterGraph,
+    labels: np.ndarray,
+    ids: list[int],
+    limit_cost: float,
+) -> dict[tuple[int, int], float]:
+    """Least-cost distances between patches, as accumulated graph cost.
+
+    For every patch a multi-source Dijkstra run (all cells of the patch at cost 0)
+    is cut off at ``limit_cost``; the distance to another patch is the cost of the
+    cheapest path to any of its cells, i.e. an edge-to-edge distance.  Interiors of
+    intermediate patches are charged at their own resistance.  Keys are positions in
+    ``ids`` with first < second.
+    """
+    flat = labels.ravel()
+    pos_of = np.full(int(flat.max()) + 1, -1, dtype=np.int64)
+    for pos, lab in enumerate(ids):
+        pos_of[lab] = pos
+    cell_pos = pos_of[flat]  # patch position of every cell, -1 elsewhere
+    order = np.argsort(flat, kind="stable")
+    sorted_labels = flat[order]
+    starts = np.searchsorted(sorted_labels, np.array(ids, dtype=np.int64), side="left")
+    ends = np.searchsorted(sorted_labels, np.array(ids, dtype=np.int64), side="right")
+
+    result: dict[tuple[int, int], float] = {}
+    for pos, lab in enumerate(ids):
+        sources = order[starts[pos] : ends[pos]]
+        dist = dijkstra(graph.graph, directed=False, indices=sources, min_only=True, limit=limit_cost)
+        reached = np.flatnonzero(np.isfinite(dist) & (cell_pos >= 0))
+        if reached.size == 0:
+            continue
+        other = cell_pos[reached]
+        keep = other > pos
+        if not keep.any():
+            continue
+        other, d = other[keep], dist[reached][keep]
+        sort = np.argsort(other, kind="stable")
+        other, d = other[sort], d[sort]
+        first = np.concatenate([[0], np.flatnonzero(np.diff(other)) + 1])
+        best = np.minimum.reduceat(d, first)
+        for o, b in zip(other[first].tolist(), best.tolist()):
+            result[(pos, int(o))] = float(b)
+    return result
+
+
 def _pc_sum(areas: np.ndarray, rows: np.ndarray, cols: np.ndarray, weights: np.ndarray) -> float:
     """sum_ij a_i a_j p*_ij for a patch graph whose edge weights are -ln p."""
     n = len(areas)
@@ -170,6 +225,7 @@ def analyse(
     habitat_mask: np.ndarray,
     resistance: np.ndarray,
     params: FragmentationParams | None = None,
+    graph: RasterGraph | None = None,
 ) -> dict:
     params = params or FragmentationParams()
     res = project.res
@@ -202,6 +258,8 @@ def analyse(
     n = len(nodes)
 
     iic = pc = eca = 0.0
+    pc_cost = eca_cost = None
+    cost_patches = 0
     components = 0
     largest_component_share = 0.0
     dpc: dict[int, float] = {}
@@ -238,6 +296,21 @@ def analyse(
         pc_total = _pc_sum(a, pair_i, pair_j, weights)
         pc = pc_total / landscape_ha**2
         eca = float(np.sqrt(pc_total))
+
+        # Cost-weighted PC / ECA: same formula, effective distance = least-cost path.
+        if params.cost_distance and graph is not None and params.reference_resistance > 0:
+            m = min(n, params.max_patches_cost)  # patches are sorted by area, largest first
+            ref = float(params.reference_resistance)
+            cost_pairs = _cost_distances(graph, labels, ids[:m], r_pair * ref)
+            ci = np.array([p[0] for p in cost_pairs], dtype=np.int64)
+            cj = np.array([p[1] for p in cost_pairs], dtype=np.int64)
+            # Centre-to-centre path cost -> edge-to-edge distance (the same one-cell
+            # correction as for the straight-line distances above).
+            cd = np.maximum(np.array(list(cost_pairs.values()), dtype=np.float64) / ref - res, 0.0)
+            cost_total = _pc_sum(a[:m], ci, cj, cd / d0)
+            pc_cost = cost_total / landscape_ha**2
+            eca_cost = float(np.sqrt(cost_total))
+            cost_patches = m
 
         # IIC: binary links at the dispersal distance, hop counts over all paths.
         linked = pair_d <= d0
@@ -296,6 +369,9 @@ def analyse(
         "iic": round(iic, 6),
         "pc": round(pc, 6),
         "eca_ha": round(eca, 1),
+        "pc_cost": None if pc_cost is None else round(pc_cost, 6),
+        "eca_cost_ha": None if eca_cost is None else round(eca_cost, 1),
+        "cost_patches": cost_patches,
         "dispersal_m": d0,
         "min_patch_ha": params.min_patch_ha,
         "size_histogram": {

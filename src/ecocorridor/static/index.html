@@ -258,10 +258,22 @@
           <span class="kpi-delta" id="kpi-pc-d"></span>
         </div>
         <div class="kpi">
+          <span class="kpi-label">PC по стоимости</span>
+          <b id="kpi-pcc">—</b>
+          <span class="kpi-unit">индекс</span>
+          <span class="kpi-delta" id="kpi-pcc-d"></span>
+        </div>
+        <div class="kpi">
           <span class="kpi-label">IIC</span>
           <b id="kpi-iic">—</b>
           <span class="kpi-unit">индекс</span>
           <span class="kpi-delta" id="kpi-iic-d"></span>
+        </div>
+        <div class="kpi">
+          <span class="kpi-label">ECA по стоимости</span>
+          <b id="kpi-eca">—</b>
+          <span class="kpi-unit">га</span>
+          <span class="kpi-delta" id="kpi-eca-d"></span>
         </div>
         <div class="kpi">
           <span class="kpi-label">Сеть</span>
@@ -441,7 +453,11 @@
         <code>e^(−d/d₀)</code> по цепочке патчей (Saura &amp; Pascual-Hortal 2007);
         <code>IIC = ΣΣ aᵢaⱼ/(1+nlᵢⱼ) / A_L²</code> по бинарному графу со связью при d ≤ d₀ (Pascual-Hortal &amp; Saura 2006).
         dPC — относительная потеря PC при удалении патча (Pascual-Hortal &amp; Saura 2006; Saura &amp; Pascual-Hortal 2007).
-        Расстояния между патчами — по прямой между ближайшими краями.</p>
+        Расстояния между патчами в PC, IIC и ECA — по прямой между ближайшими краями.
+        <b>PC по стоимости</b> — та же формула, но расстояние между краями заменено эффективным: стоимость пути
+        наименьшего сопротивления, делённая на опорное сопротивление (по умолчанию 10) и уменьшенная на размер ячейки;
+        так индекс реагирует на изменение проницаемости. Считается для 400 крупнейших патчей; опорное сопротивление —
+        неоткалиброванный параметр.</p>
 
       <h3>5. Узкие места</h3>
       <p>Эвристика: для каждой ячейки коридора считается локальная ширина (удвоенное расстояние до края коридора);

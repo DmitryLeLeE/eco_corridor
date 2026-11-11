@@ -61,6 +61,7 @@ const Charts = (() => {
     const metrics = [
       { label: "MESH, га", window: 5, value: (row) => row.fragmentation?.mesh_ha ?? 0, format: (v) => nf(v, 0) },
       { label: "PC", window: 5, value: (row) => row.fragmentation?.pc ?? 0, format: (v) => nf(v, 3) },
+      { label: "PC по стоимости", window: 12, value: (row) => row.fragmentation?.pc_cost ?? 0, format: (v) => nf(v, 3) },
       { label: "IIC", window: 5, value: (row) => row.fragmentation?.iic ?? 0, format: (v) => nf(v, 3) },
       { label: "Стоимость сети", window: 12, value: (row) => row.network?.network_cost ?? 0, format: (v) => nf(v / 1000, 0) + " k" },
       { label: "Длина сети, км", window: 12, value: (row) => row.network?.total_length_km ?? 0, format: (v) => nf(v, 0) },
@@ -83,6 +84,7 @@ const Charts = (() => {
         <td><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${row.accent};margin-right:7px"></span>${row.name}</td>
         <td>${nf(f.mesh_ha, 0)}</td>
         <td>${nf(f.pc, 3)}</td>
+        <td>${f.pc_cost == null ? "—" : nf(f.pc_cost, 3)}</td>
         <td>${nf(f.iic, 3)}</td>
         <td>${nf(f.patch_count, 0)}</td>
         <td>${nf(n.link_count, 0)}</td>
@@ -90,6 +92,7 @@ const Charts = (() => {
         <td>${nf((n.network_cost ?? 0) / 1000, 0)} k</td>
         <td>${nf(n.mean_resistance, 1)}</td>
         <td class="delta ${deltaClass(row.delta?.pc_pct)}">${row.id === "base" ? "—" : pct(row.delta?.pc_pct)}</td>
+        <td class="delta ${deltaClass(row.delta?.pc_cost_pct)}">${row.id === "base" ? "—" : pct(row.delta?.pc_cost_pct)}</td>
       </tr>`;
     }).join("");
 
@@ -99,17 +102,19 @@ const Charts = (() => {
         <h3>Полная таблица</h3>
         <table class="compare-table">
           <thead><tr>
-            <th>Сценарий</th><th>MESH, га</th><th>PC</th><th>IIC</th><th>Патчей</th>
-            <th>Связей</th><th>Длина, км</th><th>Стоимость</th><th>R коридоров</th><th>Δ PC</th>
+            <th>Сценарий</th><th>MESH, га</th><th>PC</th><th>PC (стоим.)</th><th>IIC</th><th>Патчей</th>
+            <th>Связей</th><th>Длина, км</th><th>Стоимость</th><th>R коридоров</th><th>Δ PC</th><th>Δ PC (стоим.)</th>
           </tr></thead>
           <tbody>${tableRows}</tbody>
         </table>
       </div>
-      <p class="compare-note">Шкалы столбцов ограничены окном ±5 % (для стоимости и длины — ±12 %) от базового
-        сценария, чтобы различия были читаемы. MESH, PC и IIC считаются по геометрии патчей (площадь и расстояние
-        по прямой между краями), поэтому реагируют на потерю или появление местообитаний и разрезание патчей дорогами,
-        но не на изменение одного лишь сопротивления: эффект восстановления проницаемости виден в стоимости и
-        сопротивлении коридоров, а Δ PC у такого сценария равна нулю. Все сценарии пересчитаны при одинаковых параметрах модели.</p>`;
+      <p class="compare-note">Шкалы столбцов ограничены окном ±5 % (для PC по стоимости, стоимости и длины сети — ±12 %)
+        от базового сценария, чтобы различия были читаемы. MESH, PC и IIC считаются по геометрии патчей (площадь и
+        расстояние по прямой между краями): они реагируют на потерю или появление местообитаний и разрезание патчей
+        дорогами, но не на изменение одного лишь сопротивления. PC по стоимости использует вместо прямой путь наименьшей
+        стоимости между краями патчей (эффективное расстояние = стоимость / опорное сопротивление) и поэтому меняется при
+        изменении проницаемости: у сценария «Восстановление» Δ PC равна нулю, а Δ PC (стоим.) — нет. Все сценарии
+        пересчитаны при одинаковых параметрах модели.</p>`;
   }
 
   return { nf, pct, deltaClass, deltaChip, histogram, compareBody, barRow };

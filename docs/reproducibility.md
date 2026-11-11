@@ -27,7 +27,7 @@
 git clone https://github.com/DmitryLeLeE/eco_corridor && cd eco_corridor
 python -m venv .venv && . .venv/bin/activate
 pip install -e ".[dev]"
-python -m pytest -q                       # 45 тестов
+python -m pytest -q                       # 50 тестов
 python scripts/make_demo_data.py          # демо-полигон
 python scripts/sensitivity.py --json out.json   # анализ чувствительности
 python scripts/build_pages.py             # этот сайт

@@ -404,12 +404,16 @@ const App = (() => {
 
     $("kpi-mesh").textContent = fmt(frag.mesh_ha, 0);
     $("kpi-pc").textContent = fmt(frag.pc, 3);
+    $("kpi-pcc").textContent = frag.pc_cost == null ? "—" : fmt(frag.pc_cost, 3);
     $("kpi-iic").textContent = fmt(frag.iic, 3);
+    $("kpi-eca").textContent = frag.eca_cost_ha == null ? "—" : fmt(frag.eca_cost_ha, 0);
     $("kpi-links").textContent = fmt(stats.link_count, 0);
 
     setDelta("kpi-mesh-d", delta.mesh_ha_pct);
     setDelta("kpi-pc-d", delta.pc_pct);
+    setDelta("kpi-pcc-d", delta.pc_cost_pct);
     setDelta("kpi-iic-d", delta.iic_pct);
+    setDelta("kpi-eca-d", delta.eca_cost_pct);
     setDelta("kpi-links-d", null);
 
     $("net-length").textContent = `${fmt(stats.total_length_km, 0)} км`;

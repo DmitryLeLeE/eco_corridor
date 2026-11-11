@@ -89,7 +89,7 @@ def run(project: Project, scenario: Scenario, params: ModelParams | None = None)
     if scenario.id != "base":
         # Fragmentation must be evaluated on the scenario land cover.
         view = _with_landcover(project, landcover)
-    fragmentation = analyse_fragmentation(view, habitat, resistance, params.fragmentation)
+    fragmentation = analyse_fragmentation(view, habitat, resistance, params.fragmentation, graph=graph)
 
     core_cells = graph.cells_of(project.core_mask())
     cost = graph.cost_surface(core_cells) if core_cells.size else np.full(project.shape, np.nan)
@@ -233,6 +233,8 @@ def _delta(base: AnalysisResult, current: AnalysisResult) -> dict:
     curve = {
         "mesh_ha_pct": _pct(cur_frag.get("mesh_ha"), base_frag.get("mesh_ha")),
         "pc_pct": _pct(cur_frag.get("pc"), base_frag.get("pc")),
+        "pc_cost_pct": _pct(cur_frag.get("pc_cost"), base_frag.get("pc_cost")),
+        "eca_cost_pct": _pct(cur_frag.get("eca_cost_ha"), base_frag.get("eca_cost_ha")),
         "iic_pct": _pct(cur_frag.get("iic"), base_frag.get("iic")),
         "link_length_pct": _pct(current.network.stats.get("total_length_km"), base.network.stats.get("total_length_km")),
         "corridor_area_pct": _pct(current.network.stats.get("corridor_area_ha"), base.network.stats.get("corridor_area_ha")),
