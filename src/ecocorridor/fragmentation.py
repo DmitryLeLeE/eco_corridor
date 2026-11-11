@@ -44,9 +44,10 @@ included).
 
 Known simplifications
 ---------------------
-* Distances between patches are Euclidean edge-to-edge distances, not
-  cost-weighted distances; the resistance surface enters the corridor model but
-  not these indices.
+* PC, ECA, IIC and MESH use Euclidean edge-to-edge distances between patches; the
+  resistance surface does not enter them.  ``pc_cost`` and ``eca_cost_ha`` replace
+  the straight line by the least-cost distance (cost / reference_resistance), which
+  responds to resistance but depends on the uncalibrated reference value.
 * The landscape is the raster window; patches cut by the window boundary are
   treated as if the boundary were a barrier (the "CUT" procedure of Jaeger 2000,
   see Moser et al. 2007 for the resulting boundary effect).

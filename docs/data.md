@@ -6,7 +6,7 @@
 
 | Данные | Источник | Версия / год | Лицензия и атрибуция |
 |---|---|---|---|
-| Землепокров 10 м | ESA WorldCover (Zanaga et al. 2022), облачные GeoTIFF на AWS | v200, референсный год 2021 | CC BY 4.0: «© ESA WorldCover project 2021 / Contains modified Copernicus Sentinel data (2021) processed by ESA WorldCover consortium» |
+| Землепокров 10 м | ESA WorldCover (Zanaga et al. 2022), облачные GeoTIFF на AWS | v200, референсный год 2021 | CC BY 4.0: «© ESA WorldCover project / Contains modified Copernicus Sentinel data (2021) processed by ESA WorldCover consortium» |
 | Рельеф | Copernicus DEM GLO-30 (GLO-90 как резерв), облачные GeoTIFF на AWS | постоянный продукт (DSM) | Лицензия Copernicus DEM: бесплатное использование с указанием источника «© DLR e.V. 2010–2014 и © Airbus Defence and Space GmbH 2014–2018, предоставлено ЕС и ESA в рамках программы Copernicus»; точный текст условий — на странице продукта |
 | Дороги, реки, населённые пункты, охраняемые территории | OpenStreetMap через Overpass API | на дату загрузки | ODbL 1.0: «© участники OpenStreetMap» |
 | Поиск территории | Nominatim (OpenStreetMap) | на дату запроса | ODbL; соблюдайте [политику использования](https://operations.osmfoundation.org/policies/nominatim/) |

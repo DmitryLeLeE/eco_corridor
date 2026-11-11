@@ -17,7 +17,9 @@ exact for this graph.
 
 The 8-neighbour graph over-estimates Euclidean distance by up to ~8 % in
 homogeneous terrain (elongation 1.082); the 16-neighbour graph reduces this to
-~2.7 % (1.027) at about twice the memory (Huber & Church 1985; Etherington 2020).
+~2.7 % (1.027) at about twice the memory.  Both figures are checked by the tests; the
+directional bias of regular raster graphs is discussed by Huber & Church (1985) and
+Etherington (2012).
 """
 
 from __future__ import annotations
