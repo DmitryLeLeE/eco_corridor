@@ -9,7 +9,7 @@ on a Windows machine (see docs/validation.md, section "Сверка с Conefor")
 
        python scripts/conefor_check.py toy out/toy
        # run Conefor on out/toy/nodes.txt + distances.txt as described in conefor_settings.txt
-       python scripts/conefor_check.py compare out/toy/expected.json --pc <PC> --iic <IIC> --pcnum <PCnum>
+       python scripts/conefor_check.py compare out/toy/expected.json --pc <PC> --iic <IIC> --eca <EC(PC)>
 
 2. the real landscape (bundled demo or any territory; the scenario selects the habitat mask):
 
@@ -18,7 +18,7 @@ on a Windows machine (see docs/validation.md, section "Сверка с Conefor")
 
 3. enter Conefor's values:
 
-       python scripts/conefor_check.py compare out/demo/expected.json --pc <PC> --iic <IIC> --pcnum <PCnum>
+       python scripts/conefor_check.py compare out/demo/expected.json --pc <PC> --iic <IIC> --eca <EC(PC)>
 
 ``compare`` exits with 1 when any index differs by more than --tol (relative, default 1e-3).
 """

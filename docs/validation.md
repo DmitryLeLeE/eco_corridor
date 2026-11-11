@@ -164,10 +164,10 @@ PC: до аудита / после аудита / после исправлен�
    python scripts/conefor_check.py toy out/toy
    ```
 
-   В `out/toy` лежат `nodes.txt`, `distances.txt`, `conefor_settings.txt` (настройки Conefor) и `expected.json` (ожидаемые значения: четыре участка, ответ известен). Запустите Conefor Sensinode 2.2 на этих файлах и сравните (в Conefor 2.2 нет ECA, вместо него передаётся числитель PCnum: ECA = √PCnum):
+   В `out/toy` лежат `nodes.txt`, `distances.txt`, `conefor_settings.txt` (настройки Conefor) и `expected.json` (ожидаемые значения: четыре участка, ответ известен). Запустите Conefor (2.6: `Conefor26.exe`, установка не нужна) на этих файлах и сравните. В Conefor 2.6 ECA выдаётся как EC(PC) (`--eca`); в версии 2.2 его нет, передаётся числитель PCnum (`--pcnum`, ECA = √PCnum):
 
    ```
-   python scripts/conefor_check.py compare out/toy/expected.json --pc <PC> --iic <IIC> --pcnum <PCnum>
+   python scripts/conefor_check.py compare out/toy/expected.json --pc <PC> --iic <IIC> --eca <EC(PC)>
    ```
 
    Формат файлов и настройки сверены с руководством Conefor Sensinode 2.2 (разделы 4.2, 5.2, 5.3, 6.2.3, 6.3): каждая пара узлов один раз, без заголовков, обе таблицы заканчиваются пустой строкой, формат связей — PARTIAL, тип связей — Distances, A<sub>L</sub> вводится вручную, связь в IIC при расстоянии не больше порога, p = exp(−k·d) с k, подобранным под заданную пару «расстояние — вероятность». Числа в полях ввода набираются с десятичным разделителем региональных настроек Windows (в русской локали — запятая). Сам Conefor в среде разработки не запускался (в папке есть руководство и исходный код, но не исполняемый файл).
