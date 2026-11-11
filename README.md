@@ -11,8 +11,10 @@ git clone https://github.com/DmitryLeLeE/eco_corridor && cd eco_corridor
 pip install -e .                       # для тестов: pip install -e ".[dev]"
 ecocorridor                            # или: python -m ecocorridor --port 8000
 # откройте http://127.0.0.1:8000
-python -m pytest -q                    # 50 тестов
+python -m pytest -q                    # 51 тест
 ```
+
+Проверка загрузки на реальных сервисах (нужен интернет): `python scripts/smoke_online.py`.
 
 Docker: `docker build -t ecocorridor . && docker run -p 8000:8000 -v ecocorridor-data:/data ecocorridor`.
 

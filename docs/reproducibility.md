@@ -27,9 +27,10 @@
 git clone https://github.com/DmitryLeLeE/eco_corridor && cd eco_corridor
 python -m venv .venv && . .venv/bin/activate
 pip install -e ".[dev]"
-python -m pytest -q                       # 50 тестов
+python -m pytest -q                       # 51 тест
 python scripts/make_demo_data.py          # демо-полигон
 python scripts/sensitivity.py --json out.json   # анализ чувствительности
+python scripts/smoke_online.py            # проверка загрузки на реальных сервисах (нужен интернет)
 python scripts/build_pages.py             # этот сайт
 uvicorn ecocorridor.api:app               # приложение
 ```

@@ -257,3 +257,20 @@ def test_territory_api_errors_are_readable(world, monkeypatch):
         time.sleep(0.1)
     assert state["status"] == "error" and "WorldCover" in state["error"]
     assert client.get("/api/territory/jobs/nope").status_code == 404
+
+
+def test_smoke_script_runs_end_to_end_on_the_synthetic_world(world, capsys):
+    """scripts/smoke_online.py is meant for the real services; here it is exercised on local tiles."""
+    import importlib.util
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parents[1] / "scripts" / "smoke_online.py"
+    spec = importlib.util.spec_from_file_location("smoke_online", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    code = module.main(["--center", f"{world['center'][0]},{world['center'][1]}", "--size-km", "20", "--res", "200"])
+    out = capsys.readouterr().out
+    assert code == 0, out
+    assert "OK:" in out and "3/3" in out
+    assert world["overpass_calls"] == 1  # the second load comes from the cache

@@ -593,9 +593,13 @@ def _core_kind(tags: dict) -> str:
 
 
 def _to_utm(geom, transformer: Transformer):
-    from shapely.ops import transform
+    import shapely
 
-    return transform(transformer.transform, geom)
+    def project(coords: np.ndarray) -> np.ndarray:
+        x, y = transformer.transform(coords[:, 0], coords[:, 1])
+        return np.column_stack([x, y])
+
+    return shapely.transform(geom, project)
 
 
 def _dedupe_cores(rows: list[dict], min_ha: float) -> list[dict]:
